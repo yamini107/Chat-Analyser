@@ -837,11 +837,11 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
         # CRT: time between each buyer→seller pair
         crt_list = []
         last_buyer_time = None
-        for r in grp[["_sender_lower", "MESSAGE_TIME"]].itertuples(index=False):
-            if r._sender_lower == "buyer":
-                last_buyer_time = r.MESSAGE_TIME
-            elif r._sender_lower == "seller" and last_buyer_time is not None:
-                delta = (r.MESSAGE_TIME - last_buyer_time).total_seconds() / 60
+for sender, msg_time in zip(grp["_sender_lower"], grp["MESSAGE_TIME"]):
+            if sender == "buyer":
+                last_buyer_time = msg_time
+            elif sender == "seller" and last_buyer_time is not None:
+                delta = (msg_time - last_buyer_time).total_seconds() / 60
                 if 0 <= delta <= 1440:
                     crt_list.append(delta)
                 last_buyer_time = None
