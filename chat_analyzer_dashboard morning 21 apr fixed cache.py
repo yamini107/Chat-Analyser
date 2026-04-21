@@ -1439,9 +1439,10 @@ def main():
             <div class="reply-label">Buyer Summary</div>
             <div class="reply-box">{row['BUYER_SUMMARY']}</div>
             """, unsafe_allow_html=True)
+            suggested = SUGGESTED_REPLIES.get(str(row['ISSUE_TYPE']), SUGGESTED_REPLIES["Other"])
             st.markdown(f"""
             <div class="reply-label">Suggested Reply</div>
-            <div class="reply-box">{row['SUGGESTED_REPLY']}</div>
+            <div class="reply-box">{suggested}</div>
             """, unsafe_allow_html=True)
 
     # ── Tab 5 : WoW / MoM Performance ────────────────────────────────────────
