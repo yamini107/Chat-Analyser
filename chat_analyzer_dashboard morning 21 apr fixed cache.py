@@ -838,9 +838,9 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
         crt_list = []
         last_buyer_time = None
         for r in grp[["_sender_lower", "MESSAGE_TIME"]].itertuples(index=False):
-            if r.get('_sender_lower') == "buyer":
+            if r._sender_lower == "buyer":
                 last_buyer_time = r.MESSAGE_TIME
-            elif r.get('_sender_lower') == "seller" and last_buyer_time is not None:
+            elif r._sender_lower == "seller" and last_buyer_time is not None:
                 delta = (r.MESSAGE_TIME - last_buyer_time).total_seconds() / 60
                 if 0 <= delta <= 1440:
                     crt_list.append(delta)
