@@ -252,6 +252,13 @@ STORE_TO_AGENT = {
     for store in stores
 }
 
+# GED is a shared store code — assign by COUNTRY_CODE
+GED_COUNTRY_TO_AGENT = {
+    "MY": "Yeria",
+    "SG": "Syahira",
+    "PH": "Keerthana",
+}
+
 AGENT_SHIFT = {
     "Yeria":      "GED MY · AACMH / FFH / IKU",
     "Syahira":    "GED SG · EWG / HFC / AAISS",
@@ -608,10 +615,14 @@ def fmt_mins(mins) -> str:
     return f"{h}h {m}m" if m else f"{h}h"
 
 
-def get_team_member(store_code: str) -> str:
+def get_team_member(store_code: str, country_code: str = "") -> str:
     code = str(store_code).strip().upper()
     if not code:
         return "Others"
+    # GED is a shared store code — route by country
+    if code == "GED":
+        country = str(country_code).strip().upper()
+        return GED_COUNTRY_TO_AGENT.get(country, "Others")
     return STORE_TO_AGENT.get(code, "Others")
 
 
@@ -875,7 +886,7 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
             "AVG_CRT_MINS":      round(avg_crt, 1) if not np.isnan(avg_crt) else None,
             "BUYER_SUMMARY":     generate_summary(b_msgs, issue_type),
             "IS_CONVERSION":     detect_conversion(b_msgs),
-            "TEAM_MEMBER":       get_team_member(_get("STORE_CODE")),
+            "TEAM_MEMBER":       get_team_member(_get("STORE_CODE"), _get("COUNTRY_CODE")),
             "IS_ANSWERED":       str(_get("IS_ANSWERED")).lower() == "true",
             "IS_READ":           str(_get("IS_READ")).lower() == "true",
         })
@@ -931,7 +942,10 @@ def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
         crr        = round(resolved / total * 100, 1) if total else 0
         avg_crt    = df["AVG_CRT_MINS"].mean()
         avg_csat   = df["CSAT_PROXY"].mean()
-        today_df   = df[df["LAST_MSG_TIME"].dt.normalize() == pd.Timestamp(today_str)]
+        # Use latest date in the exported data, not system today
+        data_max_ts = df["LAST_MSG_TIME"].dropna().max()
+        data_max_date = data_max_ts.normalize() if pd.notna(data_max_ts) else pd.Timestamp(today_str)
+        today_df   = df[df["LAST_MSG_TIME"].dt.normalize() == data_max_date]
         hi_today   = len(today_df[today_df["PRIORITY"] == "High"])
 
         ws1.write(0, 0, f"Chat Analyzer Summary — {today_str}", wb.add_format(
