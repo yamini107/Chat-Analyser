@@ -2,29 +2,29 @@
 Chat Analyzer Dashboard — Shopee & Lazada
 ==========================================
 Graas.ai-themed Streamlit app for daily chat enquiry analysis.
-
+ 
 Run:  streamlit run chat_analyzer_dashboard.py
 Deps: pip install streamlit pandas openpyxl xlsxwriter
 """
-
+ 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import re, io, warnings, gc
 from datetime import datetime, timedelta
-
+ 
 warnings.filterwarnings("ignore")
-
-# ───────────────────A──────────────────────────────────────────────────────────
+ 
+# ─────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG — Graas.ai theme
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Chat Analyzer Daashboard | Graas.ai",
+    page_title="Chat Analyzer Dashboard | Graas.ai",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOM CSS — Graas.ai brand colours (#1B2A4A navy, #00C4B4 teal, #FF6B35 orange)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ st.markdown("""
 html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
 .main { background: #F4F6FB; }
 .block-container { padding: 1.5rem 2rem; }
-
+ 
 /* ── Top header bar ── */
 .graas-header {
     background: linear-gradient(135deg, #1B2A4A 0%, #243554 100%);
@@ -48,7 +48,7 @@ html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
 .graas-header h1 { color: #fff; margin: 0; font-size: 1.5rem; font-weight: 700; }
 .graas-header p  { color: #A8C0D6; margin: 0; font-size: 0.85rem; }
 .graas-logo { color: #00C4B4; font-size: 2rem; }
-
+ 
 /* ── Metric cards ── */
 .metric-row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
 .metric-card {
@@ -67,7 +67,7 @@ html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
 .metric-val { font-size: 1.9rem; font-weight: 800; color: #1B2A4A; }
 .metric-label { font-size: 0.78rem; color: #7A8EA8; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
 .metric-sub { font-size: 0.75rem; color: #A0AEC0; margin-top: 2px; }
-
+ 
 /* ── Section titles ── */
 .section-title {
     font-size: 1rem;
@@ -77,17 +77,17 @@ html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
     padding-bottom: 0.4rem;
     margin: 1.5rem 0 1rem;
 }
-
+ 
 /* ── Priority badges ── */
 .badge-high   { background:#FDECEA; color:#C0392B; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:600; }
 .badge-medium { background:#FEF9E7; color:#D68910; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:600; }
 .badge-low    { background:#EAF4FB; color:#2980B9; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:600; }
-
+ 
 /* ── Sentiment ── */
 .sent-pos { color:#27AE60; font-weight:600; }
 .sent-neu { color:#7F8C8D; font-weight:600; }
 .sent-neg { color:#C0392B; font-weight:600; }
-
+ 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] { background: #1B2A4A !important; }
 section[data-testid="stSidebar"] .stMarkdown h2,
@@ -96,7 +96,6 @@ section[data-testid="stSidebar"] .stMarkdown h3 {
 }
 section[data-testid="stSidebar"] .stMarkdown p,
 section[data-testid="stSidebar"] .stMarkdown span { color: #FFFFFF !important; }
-/* Filter labels — bright white */
 section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] .stSelectbox > label,
 section[data-testid="stSidebar"] .stMultiSelect > label,
@@ -107,7 +106,6 @@ section[data-testid="stSidebar"] .stTextInput > label {
     font-weight: 600 !important;
     letter-spacing: 0.3px !important;
 }
-/* Input boxes — white background for contrast */
 section[data-testid="stSidebar"] .stSelectbox > div > div,
 section[data-testid="stSidebar"] .stMultiSelect > div > div,
 section[data-testid="stSidebar"] .stDateInput > div > div > input,
@@ -119,20 +117,17 @@ section[data-testid="stSidebar"] .stTextInput > div > div > input {
 }
 section[data-testid="stSidebar"] .stSelectbox svg,
 section[data-testid="stSidebar"] .stMultiSelect svg { color: #1B2A4A !important; fill: #1B2A4A !important; }
-/* Multiselect tag pills */
 section[data-testid="stSidebar"] .stMultiSelect span[data-baseweb="tag"] {
     background: #00C4B4 !important; color: #fff !important;
 }
-/* Sidebar divider */
 section[data-testid="stSidebar"] hr { border-color: #2E4A6A !important; }
-/* Result count text */
 section[data-testid="stSidebar"] strong { color: #00C4B4 !important; }
-
+ 
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] { background: #fff; border-radius:8px; padding:4px; gap:4px; }
 .stTabs [data-baseweb="tab"] { border-radius:6px; padding:6px 18px; font-weight:600; color:#7A8EA8; }
 .stTabs [aria-selected="true"] { background:#00C4B4 !important; color:#fff !important; }
-
+ 
 /* ── Suggested reply box ── */
 .reply-box {
     background: #F0FBF9;
@@ -145,7 +140,7 @@ section[data-testid="stSidebar"] strong { color: #00C4B4 !important; }
     margin-top: 0.5rem;
 }
 .reply-label { font-size:0.75rem; color:#00C4B4; font-weight:700; text-transform:uppercase; margin-bottom:4px; }
-
+ 
 /* ── Upload area ── */
 .upload-area {
     background: #fff;
@@ -155,14 +150,24 @@ section[data-testid="stSidebar"] strong { color: #00C4B4 !important; }
     text-align: center;
     margin-bottom: 1rem;
 }
+ 
+/* ── Store search result info box ── */
+.store-search-info {
+    background: #E8F8F6;
+    border: 1px solid #00C4B4;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    color: #1B2A4A;
+    margin-top: 4px;
+}
 </style>
 """, unsafe_allow_html=True)
-
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
-
-# Issue-type keyword mapping
+ 
 ISSUE_KEYWORDS = {
     "Refund": [
         "refund", "คืนเงิน", "pengembalian dana", "dana kembali", "ibalik", "irefund",
@@ -220,36 +225,33 @@ ISSUE_KEYWORDS = {
         "kecewa", "mengecewakan", "tidak puas", "buruk", "parah",
     ],
 }
-
+ 
 PRIORITY_MAP = {
     "High":   ["Refund", "Complaint", "Damaged/Wrong Item"],
     "Medium": ["Delay", "Missing Item", "Return", "Cancellation"],
     "Low":    ["Product Inquiry", "Promotion Issue", "Payment Issue", "Technical Issue"],
 }
-
+ 
 # ── Team Member → Store Code mapping (effective 30 March 2026) ────────────────
-# GED = General Ecommerce Department (market label, not a store code)
 TEAM_ASSIGNMENTS = {
     "Yeria":      ["AACMH", "FFH", "IKU",
-                   "GED MY", "GEDMY", "GED_MY"],       # GED MY · all format variants
+                   "GED MY", "GEDMY", "GED_MY"],
     "Syahira":    ["EWG", "HFC", "AAISS",
-                   "GED SG", "GEDSG", "GED_SG"],       # GED SG · all format variants
+                   "GED SG", "GEDSG", "GED_SG"],
     "Keerthana":  ["AABIY", "AABIW", "AAFTP",
-                   "GED PH", "GEDPH", "GED_PH"],       # GED PH · all format variants
+                   "GED PH", "GEDPH", "GED_PH"],
     "Alfian":     ["IGZ", "AADMJ", "AAEDD", "AADWP",
-                   "IGZ ID", "IGZID", "IGZ_ID"],       # IGZ ID · all format variants
+                   "IGZ ID", "IGZID", "IGZ_ID"],
     "Jaye":       ["GSK", "DBC", "IEI", "FYW", "ILL"],
-    "Ratchakorn": ["AABWU", "AAFHU", "AAFHB"],        # Full-time
+    "Ratchakorn": ["AABWU", "AAFHU", "AAFHB"],
 }
-
-# Reverse lookup: store_code → agent name
+ 
 STORE_TO_AGENT = {
     store.upper(): agent
     for agent, stores in TEAM_ASSIGNMENTS.items()
     for store in stores
 }
-
-# Shift / market label per agent
+ 
 AGENT_SHIFT = {
     "Yeria":      "GED MY · AACMH / FFH / IKU",
     "Syahira":    "GED SG · EWG / HFC / AAISS",
@@ -258,8 +260,7 @@ AGENT_SHIFT = {
     "Jaye":       "GSK / DBC / IEI / FYW / ILL",
     "Ratchakorn": "Full-time · AABWU / AAFHU / AAFHB",
 }
-
-# Stalling phrases (seller still processing — NOT resolved)
+ 
 STALLING_PATTERNS = [
     r"will (check|look|get back|follow up|investigate|verify|review|update)",
     r"let me (check|look into|verify|confirm|see)",
@@ -279,8 +280,7 @@ STALLING_PATTERNS = [
     r"จะติดต่อกลับ", r"ติดตามให้", r"กำลังประสานงาน",
     r"escalat",
 ]
-
-# Resolution phrases (conversation closed / solved)
+ 
 RESOLUTION_PATTERNS = [
     r"refund (has been|was|is) (processed|completed|done|issued|approved)",
     r"(your|the) (order|item|package) (has been|was|is) (shipped|dispatched|replaced|delivered)",
@@ -295,8 +295,7 @@ RESOLUTION_PATTERNS = [
     r"sudah (diproses|selesai|dikirim|dikembalikan|dibatalkan)",
     r"telah (diproses|selesai|diselesaikan|dikirimkan)",
 ]
-
-# Auto-reply detection
+ 
 AUTO_REPLY_PATTERNS = [
     r"(thank you for contacting|thanks for reaching out).*auto",
     r"auto.?reply", r"automated (response|message|reply)",
@@ -307,8 +306,7 @@ AUTO_REPLY_PATTERNS = [
     r"ยินดีต้อนรับ.*ร้าน",
     r"hi.{0,30}welcome to.{0,40}store",
 ]
-
-# Positive / Negative sentiment keywords (multilingual)
+ 
 POSITIVE_KWS = [
     "thank", "thanks", "great", "excellent", "awesome", "perfect", "love",
     "good", "nice", "happy", "satisfied", "wonderful", "amazing", "fantastic",
@@ -317,7 +315,7 @@ POSITIVE_KWS = [
     "terima kasih", "bagus", "mantap", "keren", "memuaskan", "puas", "oke baik",
     "salamat", "maganda", "ayos", "galing",
 ]
-
+ 
 NEGATIVE_KWS = [
     "terrible", "worst", "angry", "disappointed", "frustrated", "cheated", "scam",
     "fraud", "fake", "broken", "damaged", "wrong item", "missing", "never received",
@@ -327,8 +325,7 @@ NEGATIVE_KWS = [
     "tipu", "rusak", "cacat", "mengecewakan", "marah", "kecewa", "buruk", "parah",
     "salah", "tidak diterima", "hilang",
 ]
-
-# Suggested replies per issue type
+ 
 SUGGESTED_REPLIES = {
     "Refund": (
         "Thank you for reaching out, and we sincerely apologise for the inconvenience. "
@@ -418,11 +415,9 @@ SUGGESTED_REPLIES = {
         "How was your experience with our support team today?"
     ),
 }
-
-# Team tracking start date
+ 
 TEAM_START_DATE = pd.Timestamp("2026-03-30")
-
-# Conversion / guided-order keywords (multilingual)
+ 
 CONVERSION_KEYWORDS = [
     "i want to buy", "i'd like to buy", "i would like to buy", "how to buy",
     "how to order", "how do i order", "place an order", "can i order",
@@ -433,8 +428,7 @@ CONVERSION_KEYWORDS = [
     "mau beli", "mau order", "mau pesan", "ingin beli", "ingin order", "cara beli",
     "mag-order", "gusto kong bilhin", "bibilhin ko", "paano mag-order",
 ]
-
-# Action steps per issue type (DKSH / GRAAS operational guide)
+ 
 ACTION_STEPS = {
     "Refund": (
         "1. Verify order ID and payment method in Seller Centre.\n"
@@ -525,13 +519,12 @@ ACTION_STEPS = {
         "4. Log in DKSH tracker under 'General Enquiries'."
     ),
 }
-
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 def detect_sentiment(text: str) -> str:
-    """Keyword-based multilingual sentiment detector."""
     if not isinstance(text, str) or not text.strip():
         return "Neutral"
     t = text.lower()
@@ -542,10 +535,9 @@ def detect_sentiment(text: str) -> str:
     if pos > neg:
         return "Positive"
     return "Neutral"
-
-
+ 
+ 
 def detect_issue_type(text: str) -> str:
-    """Classify message into one of 11 issue types using keyword matching."""
     if not isinstance(text, str) or not text.strip():
         return "Other"
     t = text.lower()
@@ -557,44 +549,37 @@ def detect_issue_type(text: str) -> str:
     if not scores:
         return "Other"
     return max(scores, key=scores.get)
-
-
+ 
+ 
 def get_priority(issue_type: str) -> str:
-    """Map issue type to priority level."""
     for priority, issues in PRIORITY_MAP.items():
         if issue_type in issues:
             return priority
     return "Low"
-
-
+ 
+ 
 def matches_any(text: str, patterns: list) -> bool:
-    """Check if text matches any regex pattern (case-insensitive)."""
     if not isinstance(text, str):
         return False
     t = text.lower()
     return any(re.search(p, t, re.IGNORECASE) for p in patterns)
-
-
+ 
+ 
 def is_auto_reply(text: str) -> bool:
     return matches_any(text, AUTO_REPLY_PATTERNS)
-
-
+ 
+ 
 def conversation_is_unresolved(seller_msgs: list) -> bool:
-    """
-    Returns True if conversation has stalling phrases without a following resolution phrase.
-    Strategy: scan chronologically. If stall found but no later resolution → unresolved.
-    """
     stall_found = False
     for msg in seller_msgs:
         if matches_any(msg, STALLING_PATTERNS):
             stall_found = True
         if matches_any(msg, RESOLUTION_PATTERNS):
-            stall_found = False   # Resolution found after stall → mark resolved
+            stall_found = False
     return stall_found
-
-
+ 
+ 
 def compute_csat(sentiment: str, is_resolved: bool) -> float:
-    """Proxy CSAT score 1–5 based on sentiment + resolution."""
     matrix = {
         ("Positive", True):  5.0,
         ("Positive", False): 3.5,
@@ -604,18 +589,16 @@ def compute_csat(sentiment: str, is_resolved: bool) -> float:
         ("Negative", False): 1.0,
     }
     return matrix.get((sentiment, is_resolved), 3.0)
-
-
+ 
+ 
 def generate_summary(buyer_msgs: list, issue_type: str) -> str:
-    """Rule-based buyer chat summary."""
     if not buyer_msgs:
         return "No buyer messages."
     combined = " ".join([m for m in buyer_msgs if isinstance(m, str)])[:400]
     return f"[{issue_type}] Buyer enquiry: {combined[:200]}{'...' if len(combined) > 200 else ''}"
-
-
+ 
+ 
 def fmt_mins(mins) -> str:
-    """Format float minutes → human-readable."""
     if pd.isna(mins) or mins < 0:
         return "—"
     if mins < 60:
@@ -623,41 +606,44 @@ def fmt_mins(mins) -> str:
     h = int(mins // 60)
     m = int(mins % 60)
     return f"{h}h {m}m" if m else f"{h}h"
-
-
+ 
+ 
 def get_team_member(store_code: str) -> str:
-    """Return agent name for a given store code.
-    Unknown stores are grouped as 'Others' so they aggregate together
-    in Team Performance. Individual store codes remain visible via STORE_CODE column.
-    """
     code = str(store_code).strip().upper()
     if not code:
         return "Others"
     return STORE_TO_AGENT.get(code, "Others")
-
-
+ 
+ 
 def detect_conversion(buyer_msgs: list) -> bool:
-    """Detect if buyer expressed intent to buy / guided order."""
     combined = " ".join([m for m in buyer_msgs if isinstance(m, str)]).lower()
     return any(kw.lower() in combined for kw in CONVERSION_KEYWORDS)
-
-
+ 
+ 
 def get_action_steps(issue_type: str) -> str:
-    """Return DKSH/GRAAS operational action steps for the issue type."""
     return ACTION_STEPS.get(issue_type, ACTION_STEPS["Other"])
-
-
+ 
+ 
+def filter_stores_by_search(all_stores: list, search_term: str) -> list:
+    """
+    Return stores whose code contains the search_term (case-insensitive).
+    Also expands GED-family aliases: searching 'GED' returns all GED MY/SG/PH variants.
+    """
+    if not search_term or not search_term.strip():
+        return all_stores
+    term = search_term.strip().upper()
+    return [s for s in all_stores if term in str(s).upper()]
+ 
+ 
 def compute_wow_mom(conv_df: pd.DataFrame) -> tuple:
-    """Compute Week-on-Week and Month-on-Month performance comparison."""
     df = conv_df.copy()
     df = df[df["LAST_MSG_TIME"].notna()].copy()
     if df.empty:
         return pd.DataFrame(), pd.DataFrame()
-
-    # Add period columns (use start_time for consistent datetime grouping)
+ 
     df["WEEK"]  = df["LAST_MSG_TIME"].dt.to_period("W").apply(lambda r: r.start_time)
     df["MONTH"] = df["LAST_MSG_TIME"].dt.to_period("M").apply(lambda r: r.start_time)
-
+ 
     def agg_metrics(df_in, period_col):
         agg = (
             df_in.groupby(period_col)
@@ -677,23 +663,21 @@ def compute_wow_mom(conv_df: pd.DataFrame) -> tuple:
         agg["CRR_%"] = (agg["Resolved"] / agg["Conversations"] * 100).round(1)
         agg["Avg_CSAT"] = agg["Avg_CSAT"].round(2)
         agg["Avg_CRT_mins"] = agg["Avg_CRT_mins"].round(1)
-        # Deltas (vs previous period)
         for col in ["Conversations", "Avg_CSAT", "CRR_%", "Avg_CRT_mins", "Conversions"]:
             agg[f"Δ {col}"] = agg[col].diff().round(2)
         return agg
-
+ 
     wow = agg_metrics(df, "WEEK")
     mom = agg_metrics(df, "MONTH")
     return wow, mom
-
-
+ 
+ 
 def compute_team_performance(conv_df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate metrics per team member (from TEAM_START_DATE onwards)."""
     df = conv_df.copy()
     df = df[df["LAST_MSG_TIME"] >= TEAM_START_DATE].copy()
     if df.empty or "TEAM_MEMBER" not in df.columns:
         return pd.DataFrame()
-
+ 
     perf = (
         df.groupby("TEAM_MEMBER")
         .agg(
@@ -709,24 +693,23 @@ def compute_team_performance(conv_df: pd.DataFrame) -> pd.DataFrame:
         )
         .reset_index()
     )
-    perf["CRR_%"]    = (perf["Resolved"] / perf["Conversations"] * 100).round(1)
-    perf["Avg_CSAT"] = perf["Avg_CSAT"].round(2)
+    perf["CRR_%"]        = (perf["Resolved"] / perf["Conversations"] * 100).round(1)
+    perf["Avg_CSAT"]     = perf["Avg_CSAT"].round(2)
     perf["Avg_CRT_mins"] = perf["Avg_CRT_mins"].round(1)
-    perf["Shift"]    = perf["TEAM_MEMBER"].map(AGENT_SHIFT).fillna("Day")
+    perf["Shift"]        = perf["TEAM_MEMBER"].map(AGENT_SHIFT).fillna("Day")
     perf = perf.sort_values("Conversations", ascending=False).reset_index(drop=True)
     return perf
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATA LOADING
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 @st.cache_data(show_spinner=False)
 def load_data(file_bytes: bytes) -> pd.DataFrame:
-    """Load Excel, combine both sheets, add PLATFORM column, parse dates."""
     xl = pd.ExcelFile(io.BytesIO(file_bytes))
     sheets_found = xl.sheet_names
-
+ 
     dfs = []
     platform_map = {}
     for s in sheets_found:
@@ -740,75 +723,61 @@ def load_data(file_bytes: bytes) -> pd.DataFrame:
         df = xl.parse(s, dtype=str)
         df["PLATFORM"] = platform_map[s]
         dfs.append(df)
-
+ 
     combined = pd.concat(dfs, ignore_index=True)
-
-    # Parse MESSAGE_TIME
     combined["MESSAGE_TIME"] = pd.to_datetime(combined["MESSAGE_TIME"], errors="coerce")
-
-    # Normalise columns
+ 
     for col in ["STORE_CODE", "SITE_NICK_NAME_ID", "CHANNEL_NAME", "COUNTRY_CODE",
                 "CONVERSATION_ID", "BUYER_NAME", "MESSAGE_PARSED",
                 "MESSAGE_TYPE", "SENDER"]:
         if col in combined.columns:
             combined[col] = combined[col].fillna("").astype(str).str.strip()
-
-    # Boolean flags — vectorised to avoid pandas 3.x lambda issues
+ 
     for flag in ["IS_READ", "IS_ANSWERED"]:
         if flag in combined.columns:
             combined[flag] = (
                 combined[flag].astype(str).str.strip().str.lower()
                 .isin(["true", "1", "yes"])
             )
-
+ 
     return combined
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # ANALYSIS ENGINE
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 @st.cache_data(show_spinner=False, max_entries=1)
 def analyse(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Analyse all conversations. Cached (max 1 entry) so re-renders never re-process.
-    Memory optimised: categorical dtypes, truncated text, no large text duplicated per row.
-    """
     df = df.copy()
     df["_sender_lower"] = df["SENDER"].str.lower().fillna("")
     df_sorted = df.sort_values(["CONVERSATION_ID", "MESSAGE_TIME"])
-
+ 
     buyer_mask  = df_sorted["_sender_lower"] == "buyer"
     seller_mask = df_sorted["_sender_lower"] == "seller"
-
-    # ── Vectorize: aggregate buyer text per conversation ──────────────────────
+ 
     buyer_text_per_conv = (
         df_sorted[buyer_mask]
         .groupby("CONVERSATION_ID")["MESSAGE_PARSED"]
         .apply(lambda msgs: " ".join(m for m in msgs if isinstance(m, str)))
     )
-
-    # ── Vectorize: sentiment & issue classification ───────────────────────────
+ 
     issue_map     = buyer_text_per_conv.apply(detect_issue_type)
     sentiment_map = buyer_text_per_conv.apply(detect_sentiment)
-
-    # ── Metadata per conversation (first row) ─────────────────────────────────
+ 
     meta_cols = ["PLATFORM", "STORE_CODE", "SITE_NICK_NAME_ID", "CHANNEL_NAME",
                  "COUNTRY_CODE", "BUYER_NAME", "BUYER_ID", "IS_ANSWERED", "IS_READ"]
     meta_cols = [c for c in meta_cols if c in df_sorted.columns]
     meta_df = df_sorted.groupby("CONVERSATION_ID")[meta_cols].first()
-
-    # ── Time bounds ───────────────────────────────────────────────────────────
+ 
     time_df = df_sorted.groupby("CONVERSATION_ID")["MESSAGE_TIME"].agg(
         FIRST_MSG_TIME="min", LAST_MSG_TIME="max"
     )
-
-    # ── Message counts ────────────────────────────────────────────────────────
-    total_msgs  = df_sorted.groupby("CONVERSATION_ID").size().rename("MSG_COUNT")
+ 
+    total_msgs        = df_sorted.groupby("CONVERSATION_ID").size().rename("MSG_COUNT")
     buyer_msgs_count  = df_sorted[buyer_mask].groupby("CONVERSATION_ID").size().rename("BUYER_MSG_COUNT")
     seller_msgs_count = df_sorted[seller_mask].groupby("CONVERSATION_ID").size().rename("SELLER_MSG_COUNT")
-
-    # ── Seller message lists for unresolved detection ─────────────────────────
+ 
     seller_msgs_per_conv = (
         df_sorted[seller_mask]
         .groupby("CONVERSATION_ID")["MESSAGE_PARSED"]
@@ -819,22 +788,22 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
         .groupby("CONVERSATION_ID")["MESSAGE_PARSED"]
         .apply(list)
     )
-
-    # ── Build result row by row (only CRT needs sequential access) ────────────
+ 
     rows = []
     for conv_id, grp in df_sorted.groupby("CONVERSATION_ID", sort=False):
-        issue_type  = issue_map.get(conv_id, "Other")
-        sentiment   = sentiment_map.get(conv_id, "Neutral")
-        b_msgs      = buyer_msgs_per_conv.get(conv_id, [])
-        s_msgs      = seller_msgs_per_conv.get(conv_id, [])
-        meta        = meta_df.loc[conv_id] if conv_id in meta_df.index else {}
-
+        issue_type = issue_map.get(conv_id, "Other")
+        sentiment  = sentiment_map.get(conv_id, "Neutral")
+        b_msgs     = buyer_msgs_per_conv.get(conv_id, [])
+        s_msgs     = seller_msgs_per_conv.get(conv_id, [])
+        meta       = meta_df.loc[conv_id] if conv_id in meta_df.index else {}
+ 
         is_unresolved = conversation_is_unresolved(s_msgs)
         is_resolved   = not is_unresolved
         priority      = get_priority(issue_type)
         csat          = compute_csat(sentiment, is_resolved)
-
-        # CRT: time between each buyer→seller pair
+ 
+        # CRT: time between each buyer→seller pair — using zip() to avoid
+        # itertuples() namedtuple underscore-field renaming bug in Python 3.14
         crt_list = []
         last_buyer_time = None
         for sender, msg_time in zip(grp["_sender_lower"].tolist(), grp["MESSAGE_TIME"].tolist()):
@@ -846,13 +815,13 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
                     crt_list.append(delta)
                 last_buyer_time = None
         avg_crt = float(np.mean(crt_list)) if crt_list else np.nan
-
+ 
         def _get(field, default=""):
             try:
                 return meta[field] if hasattr(meta, "__getitem__") else getattr(meta, field, default)
             except Exception:
                 return default
-
+ 
         rows.append({
             "CONVERSATION_ID":   conv_id,
             "PLATFORM":          _get("PLATFORM"),
@@ -875,54 +844,43 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
             "CSAT_PROXY":        round(csat, 1),
             "AVG_CRT_MINS":      round(avg_crt, 1) if not np.isnan(avg_crt) else None,
             "BUYER_SUMMARY":     generate_summary(b_msgs, issue_type),
-            "SUGGESTED_REPLY":   SUGGESTED_REPLIES.get(issue_type, SUGGESTED_REPLIES["Other"]),
-            "ACTION_STEPS":      get_action_steps(issue_type),
             "IS_CONVERSION":     detect_conversion(b_msgs),
             "TEAM_MEMBER":       get_team_member(_get("STORE_CODE")),
             "IS_ANSWERED":       str(_get("IS_ANSWERED")).lower() == "true",
             "IS_READ":           str(_get("IS_READ")).lower() == "true",
         })
-
+ 
     result = pd.DataFrame(rows)
-
-    # ── Memory optimisation: categorical dtypes for low-cardinality columns ───
+ 
     for col in ["PLATFORM", "ISSUE_TYPE", "PRIORITY", "SENTIMENT",
                 "STORE_CODE", "CHANNEL_NAME", "COUNTRY_CODE", "TEAM_MEMBER", "SITE_NICK_NAME_ID"]:
         if col in result.columns:
             result[col] = result[col].astype("category")
-
-    # Truncate long text columns to reduce RAM (full text not needed in-memory)
+ 
     for col in ["BUYER_SUMMARY"]:
         if col in result.columns:
             result[col] = result[col].str[:300]
-
-    # Drop the heavy reply/action columns — looked up on-the-fly during display
-    # They are re-attached only when building Excel export
-    result.drop(columns=["SUGGESTED_REPLY", "ACTION_STEPS"], errors="ignore", inplace=True)
-
+ 
     gc.collect()
     return result
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # EXCEL EXPORT
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
-    """Build 4-sheet Excel output. Re-attaches reply/action columns on the fly."""
-    # Re-attach heavy text columns (dropped from memory after analyse())
     df = conv_df.copy()
-    if "SUGGESTED_REPLY" not in df.columns and "ISSUE_TYPE" in df.columns:
-        df["SUGGESTED_REPLY"] = df["ISSUE_TYPE"].astype(str).map(
-            lambda it: SUGGESTED_REPLIES.get(it, SUGGESTED_REPLIES["Other"])
-        )
-    if "ACTION_STEPS" not in df.columns and "ISSUE_TYPE" in df.columns:
-        df["ACTION_STEPS"] = df["ISSUE_TYPE"].astype(str).map(get_action_steps)
+    # Re-attach reply/action columns on the fly (never stored in memory)
+    df["SUGGESTED_REPLY"] = df["ISSUE_TYPE"].astype(str).map(
+        lambda it: SUGGESTED_REPLIES.get(it, SUGGESTED_REPLIES["Other"])
+    )
+    df["ACTION_STEPS"] = df["ISSUE_TYPE"].astype(str).map(get_action_steps)
+ 
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
         wb = writer.book
-
-        # ── Formats ──────────────────────────────────────────────────────────
+ 
         hdr_fmt  = wb.add_format({"bold": True, "bg_color": "#1B2A4A", "font_color": "#FFFFFF",
                                    "border": 1, "font_size": 10, "align": "center", "valign": "vcenter"})
         sub_fmt  = wb.add_format({"bold": True, "bg_color": "#00C4B4", "font_color": "#FFFFFF",
@@ -930,40 +888,28 @@ def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
         num_fmt  = wb.add_format({"num_format": "#,##0", "border": 1})
         dec_fmt  = wb.add_format({"num_format": "0.0", "border": 1})
         cell_fmt = wb.add_format({"border": 1, "font_size": 9, "text_wrap": True, "valign": "top"})
-        high_fmt = wb.add_format({"border": 1, "font_size": 9, "bg_color": "#FDECEA", "font_color": "#C0392B"})
-        med_fmt  = wb.add_format({"border": 1, "font_size": 9, "bg_color": "#FEF9E7", "font_color": "#D68910"})
-        low_fmt  = wb.add_format({"border": 1, "font_size": 9, "bg_color": "#EAF4FB", "font_color": "#2980B9"})
-
-        def write_df(ws, df, start_row=0):
-            for c_idx, col in enumerate(df.columns):
-                ws.write(start_row, c_idx, col, hdr_fmt)
-            for r_idx, row in enumerate(df.itertuples(index=False), start=start_row + 1):
-                for c_idx, val in enumerate(row):
-                    if val is None or (isinstance(val, float) and np.isnan(val)):
-                        ws.write(r_idx, c_idx, "", cell_fmt)
-                    elif isinstance(val, (int, float)):
-                        ws.write_number(r_idx, c_idx, val, dec_fmt)
-                    else:
-                        ws.write(r_idx, c_idx, str(val), cell_fmt)
-
-        # ── Sheet 1 : Summary Dashboard ──────────────────────────────────────
+ 
+        # ── Sheet 1: Summary Dashboard ────────────────────────────────────────
         ws1 = wb.add_worksheet("Summary Dashboard")
         writer.sheets["Summary Dashboard"] = ws1
         ws1.set_column(0, 0, 28)
         ws1.set_column(1, 1, 20)
-
+ 
         total      = len(df)
         resolved   = df["IS_RESOLVED"].sum()
         unresolved = df["IS_UNRESOLVED"].sum()
         crr        = round(resolved / total * 100, 1) if total else 0
         avg_crt    = df["AVG_CRT_MINS"].mean()
         avg_csat   = df["CSAT_PROXY"].mean()
-
         today_df   = df[df["LAST_MSG_TIME"].dt.normalize() == pd.Timestamp(today_str)]
         hi_today   = len(today_df[today_df["PRIORITY"] == "High"])
-
+ 
+        ws1.write(0, 0, f"Chat Analyzer Summary — {today_str}", wb.add_format(
+            {"bold": True, "font_size": 14, "font_color": "#1B2A4A"}))
+        ws1.write(1, 0, "Generated by Graas.ai Chat Analyzer Dashboard", wb.add_format(
+            {"italic": True, "font_color": "#7A8EA8"}))
+ 
         summary_data = [
-            ["METRIC", "VALUE"],
             ["Total Conversations", total],
             ["Today's Conversations", len(today_df)],
             ["Resolved Conversations", int(resolved)],
@@ -974,23 +920,17 @@ def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
             ["Today's High Priority Chats", hi_today],
             ["Platforms", ", ".join(df["PLATFORM"].astype(str).unique().tolist())],
         ]
-
-        ws1.write(0, 0, f"Chat Analyzer Summary — {today_str}", wb.add_format(
-            {"bold": True, "font_size": 14, "font_color": "#1B2A4A"}))
-        ws1.write(1, 0, "Generated by Graas.ai Chat Analyzer Dashboard", wb.add_format(
-            {"italic": True, "font_color": "#7A8EA8"}))
-
-        for i, (label, val) in enumerate(summary_data[1:], start=3):
+        for i, (label, val) in enumerate(summary_data, start=3):
             ws1.write(i, 0, label, sub_fmt)
             ws1.write(i, 1, val, cell_fmt)
-
-        ws1.write(14, 0, "ISSUE TYPE BREAKDOWN", sub_fmt)
-        ws1.write(14, 1, "COUNT", hdr_fmt)
-        for i, (issue, cnt) in enumerate(df["ISSUE_TYPE"].value_counts().items(), start=15):
+ 
+        ws1.write(13, 0, "ISSUE TYPE BREAKDOWN", sub_fmt)
+        ws1.write(13, 1, "COUNT", hdr_fmt)
+        for i, (issue, cnt) in enumerate(df["ISSUE_TYPE"].value_counts().items(), start=14):
             ws1.write(i, 0, issue, cell_fmt)
             ws1.write(i, 1, int(cnt), num_fmt)
-
-        # ── Sheet 2 : Today Priority Chats ───────────────────────────────────
+ 
+        # ── Sheet 2: Today Priority Chats ─────────────────────────────────────
         priority_cols = [c for c in [
             "CONVERSATION_ID", "PLATFORM", "STORE_CODE", "CHANNEL_NAME",
             "SITE_NICK_NAME_ID", "COUNTRY_CODE", "TEAM_MEMBER", "BUYER_NAME",
@@ -998,17 +938,15 @@ def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
             "CSAT_PROXY", "AVG_CRT_MINS", "IS_CONVERSION", "BUYER_SUMMARY", "SUGGESTED_REPLY",
         ] if c in df.columns]
         today_pri = today_df.sort_values(
-            "PRIORITY",
-            key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
+            "PRIORITY", key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
         )[priority_cols]
-
         today_pri.to_excel(writer, sheet_name="Today Priority Chats", index=False)
         ws2 = writer.sheets["Today Priority Chats"]
         ws2.set_column(0, 0, 40); ws2.set_column(1, 5, 15); ws2.set_column(10, 13, 50)
         for c_idx, col in enumerate(today_pri.columns):
             ws2.write(0, c_idx, col, hdr_fmt)
-
-        # ── Sheet 3 : Detailed Chat Analysis ─────────────────────────────────
+ 
+        # ── Sheet 3: Detailed Chat Analysis ───────────────────────────────────
         detail_cols = [c for c in [
             "CONVERSATION_ID", "PLATFORM", "STORE_CODE", "CHANNEL_NAME",
             "SITE_NICK_NAME_ID", "COUNTRY_CODE", "TEAM_MEMBER", "BUYER_NAME",
@@ -1025,26 +963,25 @@ def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
         ws3.set_column(0, 0, 40); ws3.set_column(7, 8, 18); ws3.set_column(17, 19, 60)
         for c_idx, col in enumerate(detail.columns):
             ws3.write(0, c_idx, col, hdr_fmt)
-
-        # ── Sheet 4 : Unresolved Chats ────────────────────────────────────────
+ 
+        # ── Sheet 4: Unresolved Chats ─────────────────────────────────────────
         unres = df[df["IS_UNRESOLVED"]][priority_cols].sort_values(
-            "PRIORITY",
-            key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
+            "PRIORITY", key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
         )
         unres.to_excel(writer, sheet_name="Unresolved Chats", index=False)
         ws4 = writer.sheets["Unresolved Chats"]
         ws4.set_column(0, 0, 40); ws4.set_column(10, 13, 50)
         for c_idx, col in enumerate(unres.columns):
             ws4.write(0, c_idx, col, hdr_fmt)
-
+ 
     buf.seek(0)
     return buf.read()
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # UI COMPONENTS
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 def render_header():
     st.markdown("""
     <div class="graas-header">
@@ -1055,8 +992,8 @@ def render_header():
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-
+ 
+ 
 def render_metrics(conv_df: pd.DataFrame, today_ts: pd.Timestamp):
     total      = len(conv_df)
     resolved   = int(conv_df["IS_RESOLVED"].sum())
@@ -1064,13 +1001,10 @@ def render_metrics(conv_df: pd.DataFrame, today_ts: pd.Timestamp):
     crr        = round(resolved / total * 100, 1) if total else 0
     avg_crt    = conv_df["AVG_CRT_MINS"].mean()
     avg_csat   = conv_df["CSAT_PROXY"].mean()
-
-    # Compare at day granularity using Timestamps (pandas 3.0 safe)
-    today_conv  = conv_df[conv_df["LAST_MSG_TIME"].dt.normalize() == today_ts]
-    hi_today    = len(today_conv[today_conv["PRIORITY"] == "High"])
-
-    neg_pct = round(len(conv_df[conv_df["SENTIMENT"] == "Negative"]) / total * 100, 1) if total else 0
-
+    today_conv = conv_df[conv_df["LAST_MSG_TIME"].dt.normalize() == today_ts]
+    hi_today   = len(today_conv[today_conv["PRIORITY"] == "High"])
+    neg_pct    = round(len(conv_df[conv_df["SENTIMENT"] == "Negative"]) / total * 100, 1) if total else 0
+ 
     cols = st.columns(8)
     metrics = [
         (cols[0], "🗣️ Total Convs", f"{total:,}",   "7-day window", ""),
@@ -1091,102 +1025,101 @@ def render_metrics(conv_df: pd.DataFrame, today_ts: pd.Timestamp):
                 <div class="metric-sub">{sub}</div>
             </div>
             """, unsafe_allow_html=True)
-
-
-def priority_badge(p: str) -> str:
-    cls = {"High": "badge-high", "Medium": "badge-medium", "Low": "badge-low"}.get(p, "badge-low")
-    return f'<span class="{cls}">{p}</span>'
-
-
-def sentiment_span(s: str) -> str:
-    cls = {"Positive": "sent-pos", "Neutral": "sent-neu", "Negative": "sent-neg"}.get(s, "sent-neu")
-    icon = {"Positive": "😊", "Neutral": "😐", "Negative": "😠"}.get(s, "")
-    return f'<span class="{cls}">{icon} {s}</span>'
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
-# SIDEBAR FILTERS
+# SIDEBAR FILTERS  ← Store Code now has partial-match search
 # ─────────────────────────────────────────────────────────────────────────────
-
-def apply_filters(conv_df: pd.DataFrame, today_ts: pd.Timestamp) -> pd.DataFrame:
-    """
-    All filter OPTIONS are drawn from the full conv_df (source data) so they
-    never disappear. Selections are then applied to produce the filtered result.
-    """
-    src = conv_df  # keep full source for populating option lists
-
+ 
+def apply_filters(conv_df: pd.DataFrame, today_ts: pd.Timestamp, data_end=None) -> pd.DataFrame:
+    src = conv_df
+ 
     st.sidebar.markdown("## 🔍 Filters")
     st.sidebar.markdown("---")
-
-    # ── Platform — options from full source ───────────────────────────────────
+ 
+    # Platform
     platforms = ["All"] + sorted(src["PLATFORM"].dropna().unique().tolist())
     sel_platform = st.sidebar.selectbox("🌐 Platform", platforms)
-
-    # ── Date Range — min/max from full source, default = last 7 days ──────────
+ 
+    # Date Range
     _ts_min = src["LAST_MSG_TIME"].dropna().min()
     _ts_max = src["LAST_MSG_TIME"].dropna().max()
     min_date = _ts_min.date() if pd.notna(_ts_min) else datetime.today().date()
     max_date = _ts_max.date() if pd.notna(_ts_max) else datetime.today().date()
-    default_start = max(min_date, (today_ts - pd.Timedelta(days=6)).date())
-
+    # Default: show ALL data in the file (min → max), not just last 7 days
+    # This ensures no data is silently excluded when user first loads the file
+    default_start = min_date
+ 
     date_range = st.sidebar.date_input(
         "📅 Date Range",
         value=(default_start, max_date),
         min_value=min_date,
         max_value=max_date,
-        help="Default: last 7 days. Expand to compare Jan vs Feb or any custom range.",
+        help="Defaults to full data range. Narrow it to focus on a specific period.",
     )
-
-    # ── Priority ──────────────────────────────────────────────────────────────
-    sel_prio = st.sidebar.selectbox("🔴 Priority", ["All", "High", "Medium", "Low"])
-
-    # ── Sentiment ─────────────────────────────────────────────────────────────
-    sel_sent = st.sidebar.selectbox("😊 Sentiment", ["All", "Positive", "Neutral", "Negative"])
-
-    # ── Resolution Status ─────────────────────────────────────────────────────
-    sel_res = st.sidebar.selectbox("✅ Resolution Status", ["All", "Resolved", "Unresolved"])
-
-    # ── Issue Type — options from full source ─────────────────────────────────
+ 
+    # Priority / Sentiment / Resolution / Issue
+    sel_prio  = st.sidebar.selectbox("🔴 Priority", ["All", "High", "Medium", "Low"])
+    sel_sent  = st.sidebar.selectbox("😊 Sentiment", ["All", "Positive", "Neutral", "Negative"])
+    sel_res   = st.sidebar.selectbox("✅ Resolution Status", ["All", "Resolved", "Unresolved"])
     issue_opts = ["All"] + sorted(src["ISSUE_TYPE"].dropna().unique().tolist())
     sel_issue = st.sidebar.selectbox("🏷️ Issue Type", issue_opts)
-
+ 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔎 Search & Filter")
-
-    # ── Team Member — options from full source ────────────────────────────────
+ 
+    # Team Member
     if "TEAM_MEMBER" in src.columns:
         all_agents = sorted(src["TEAM_MEMBER"].dropna().unique().tolist())
         sel_agents = st.sidebar.multiselect("👤 Team Member", all_agents)
     else:
         sel_agents = []
-
-    # ── Store Code — options from full source ─────────────────────────────────
+ 
+    # ── Store Code: text search → filtered multiselect ────────────────────────
     all_stores = sorted(src["STORE_CODE"].dropna().unique().tolist())
-    sel_stores = st.sidebar.multiselect("🏪 Store Code", all_stores)
-
-    # ── Country — options from full source ────────────────────────────────────
+    store_search = st.sidebar.text_input(
+        "🔍 Search Store Code",
+        placeholder="Type GED, IGZ, EWG…",
+        help="Partial match — type any part of the store code (e.g. 'GED' shows GED MY, GED SG, GED PH).",
+    )
+    # Filter available options based on the search term
+    filtered_store_opts = filter_stores_by_search(all_stores, store_search)
+ 
+    if store_search and filtered_store_opts:
+        st.sidebar.markdown(
+            f'<div class="store-search-info">🔍 {len(filtered_store_opts)} store(s) match "<b>{store_search}</b>"</div>',
+            unsafe_allow_html=True,
+        )
+    elif store_search and not filtered_store_opts:
+        st.sidebar.warning(f'No stores match "{store_search}"')
+ 
+    sel_stores = st.sidebar.multiselect(
+        "🏪 Store Code (select from results)",
+        options=filtered_store_opts,
+        default=filtered_store_opts if store_search and filtered_store_opts else [],
+        help="All matching stores are pre-selected when you search. Deselect any you don't need.",
+    )
+ 
+    # Country / Channel
     all_countries = sorted(src["COUNTRY_CODE"].dropna().unique().tolist())
     sel_countries = st.sidebar.multiselect("🌍 Country", all_countries)
-
-    # ── Channel Name — options from full source ───────────────────────────────
+ 
     if "CHANNEL_NAME" in src.columns:
         all_channels = sorted(src["CHANNEL_NAME"].dropna().replace("", pd.NA).dropna().unique().tolist())
         sel_channels = st.sidebar.multiselect("📡 Channel Name", all_channels)
     else:
         sel_channels = []
-
-    # ── Buyer Name free-text ──────────────────────────────────────────────────
+ 
+    # Free-text
     buyer_search = st.sidebar.text_input("🔍 Buyer Name")
-
-    # ── Conversation ID free-text ─────────────────────────────────────────────
-    conv_search = st.sidebar.text_input("🔍 Conversation ID")
-
-    # ── Apply all filters to source ───────────────────────────────────────────
+    conv_search  = st.sidebar.text_input("🔍 Conversation ID")
+ 
+    # ── Apply filters ─────────────────────────────────────────────────────────
     result = src.copy()
-
+ 
     if sel_platform != "All":
         result = result[result["PLATFORM"] == sel_platform]
-
+ 
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_ts = pd.Timestamp(date_range[0])
         end_ts   = pd.Timestamp(date_range[1]) + pd.Timedelta(hours=23, minutes=59, seconds=59)
@@ -1194,62 +1127,61 @@ def apply_filters(conv_df: pd.DataFrame, today_ts: pd.Timestamp) -> pd.DataFrame
             (result["LAST_MSG_TIME"] >= start_ts) &
             (result["LAST_MSG_TIME"] <= end_ts)
         ]
-
+ 
     if sel_prio != "All":
         result = result[result["PRIORITY"] == sel_prio]
-
+ 
     if sel_sent != "All":
         result = result[result["SENTIMENT"] == sel_sent]
-
+ 
     if sel_res == "Resolved":
         result = result[result["IS_RESOLVED"]]
     elif sel_res == "Unresolved":
         result = result[result["IS_UNRESOLVED"]]
-
+ 
     if sel_issue != "All":
         result = result[result["ISSUE_TYPE"] == sel_issue]
-
+ 
     if sel_agents:
         result = result[result["TEAM_MEMBER"].isin(sel_agents)]
-
+ 
     if sel_stores:
         result = result[result["STORE_CODE"].isin(sel_stores)]
-
+ 
     if sel_countries:
         result = result[result["COUNTRY_CODE"].isin(sel_countries)]
-
+ 
     if sel_channels and "CHANNEL_NAME" in result.columns:
         result = result[result["CHANNEL_NAME"].isin(sel_channels)]
-
+ 
     if buyer_search:
         result = result[result["BUYER_NAME"].str.contains(buyer_search, case=False, na=False)]
-
+ 
     if conv_search:
         result = result[result["CONVERSATION_ID"].str.contains(conv_search, case=False, na=False)]
-
+ 
     st.sidebar.markdown("---")
     total = len(result)
     st.sidebar.markdown(f"**{total:,}** of **{len(src):,}** conversations")
     if total == 0:
         st.sidebar.warning("No results — try widening the date range or clearing filters.")
     return result
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN APP
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 def main():
     render_header()
-
-    # ── File Upload ───────────────────────────────────────────────────────────
+ 
     st.markdown('<div class="section-title">📂 Upload Chat Data</div>', unsafe_allow_html=True)
     uploaded = st.file_uploader(
         "Upload Excel file with sheets: lazada_chat_enquiries & shopee_chat_enquiries",
         type=["xlsx"],
         help="Single Excel file containing both Lazada and Shopee chat sheets.",
     )
-
+ 
     if not uploaded:
         st.info("👆 Upload your chat enquiries Excel file to get started.")
         st.markdown("""
@@ -1261,61 +1193,55 @@ def main():
           `MESSAGE_TYPE`, `MESSAGE_ID`, `SENDER`, `BUYER_ID`
         """)
         return
-
-    # ── Load ALL Data ─────────────────────────────────────────────────────────
+ 
     with st.spinner("⏳ Loading chat data…"):
         raw_df = load_data(uploaded.read())
-
-    # pandas 3.0 fix: use .dropna().max() on Timestamp series, never .dt.date.max()
+ 
     _max_ts = raw_df["MESSAGE_TIME"].dropna().max()
     _min_ts = raw_df["MESSAGE_TIME"].dropna().min()
-    today_date = _max_ts.date() if pd.notna(_max_ts) else datetime.today().date()
-    today_str  = today_date.strftime("%Y-%m-%d")
-    today_ts   = pd.Timestamp(today_date)
-    data_start = _min_ts.date() if pd.notna(_min_ts) else today_date
-
+    # Use real system date as "today" — never clip data based on file's max date
+    today_date  = datetime.today().date()
+    today_str   = today_date.strftime("%Y-%m-%d")
+    today_ts    = pd.Timestamp(today_date)
+    data_end    = _max_ts.date() if pd.notna(_max_ts) else today_date
+    data_start  = _min_ts.date() if pd.notna(_min_ts) else today_date
+ 
     st.success(
         f"✅ Loaded **{len(raw_df):,}** messages · "
         f"**{raw_df['CONVERSATION_ID'].nunique():,}** conversations · "
         f"**{raw_df['PLATFORM'].nunique()}** platforms · "
-        f"Data range: **{data_start}** → **{today_date}**"
+        f"Data range: **{data_start}** → **{data_end}**"
     )
-
-    # ── Analyse ALL conversations (full dataset) ───────────────────────────────
+ 
     with st.spinner("🔍 Analysing conversations — this runs once and is cached…"):
         conv_df = analyse(raw_df)
-    del raw_df; gc.collect()   # free raw messages from memory immediately after analysis
-
-    # ── Sidebar Filters (default = last 7 days view) ───────────────────────────
-    conv_filtered = apply_filters(conv_df, today_ts)
-
+    del raw_df; gc.collect()
+ 
+    conv_filtered = apply_filters(conv_df, today_ts, data_end)
+ 
     if conv_filtered.empty:
         st.warning("No conversations match the current filters.")
         return
-
-    # ── Metrics Row ───────────────────────────────────────────────────────────
+ 
     st.markdown('<div class="section-title">📈 Key Metrics</div>', unsafe_allow_html=True)
-    render_metrics(conv_filtered, today_ts)
-
-    # ── Charts Row ────────────────────────────────────────────────────────────
+    render_metrics(conv_filtered, pd.Timestamp(data_end))
+ 
     st.markdown('<div class="section-title">📊 Analytics</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-
+ 
     with c1:
         issue_counts = conv_filtered["ISSUE_TYPE"].value_counts().reset_index()
         issue_counts.columns = ["Issue Type", "Count"]
         st.markdown("**Issue Type Distribution**")
         st.bar_chart(issue_counts.set_index("Issue Type")["Count"], color="#00C4B4")
-
+ 
     with c2:
         sent_counts = conv_filtered["SENTIMENT"].value_counts().reset_index()
         sent_counts.columns = ["Sentiment", "Count"]
         st.markdown("**Sentiment Breakdown**")
-        color_map = {"Positive": "#27AE60", "Neutral": "#7F8C8D", "Negative": "#E74C3C"}
         st.bar_chart(sent_counts.set_index("Sentiment")["Count"])
-
+ 
     with c3:
-        # Use dt.normalize() (returns Timestamp at midnight) — pandas 3.0 safe
         daily = (
             conv_filtered
             .assign(DATE=conv_filtered["LAST_MSG_TIME"].dt.normalize())
@@ -1325,8 +1251,7 @@ def main():
         )
         st.markdown("**Daily Conversation Volume**")
         st.line_chart(daily.set_index("DATE")["Conversations"], color="#FF6B35")
-
-    # ── Tabs ─────────────────────────────────────────────────────────────────
+ 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🔥 Today's Priority Chats",
         "📋 All Conversations",
@@ -1335,82 +1260,54 @@ def main():
         "📈 WoW / MoM Performance",
         "👥 Team Performance",
     ])
-
-    display_cols = [
+ 
+    display_cols = [c for c in [
         "CONVERSATION_ID", "PLATFORM", "STORE_CODE", "CHANNEL_NAME",
         "SITE_NICK_NAME_ID", "COUNTRY_CODE", "BUYER_NAME",
         "ISSUE_TYPE", "PRIORITY", "SENTIMENT", "IS_UNRESOLVED",
         "CSAT_PROXY", "AVG_CRT_MINS", "BUYER_SUMMARY",
-    ]
-    # Only include cols that actually exist in the dataframe
-    display_cols = [c for c in display_cols if c in conv_filtered.columns]
-
+    ] if c in conv_filtered.columns]
+ 
+    col_config_base = {
+        "CSAT_PROXY":    st.column_config.NumberColumn("CSAT (1-5)", format="%.1f"),
+        "AVG_CRT_MINS":  st.column_config.NumberColumn("CRT (mins)", format="%.0f"),
+        "IS_UNRESOLVED": st.column_config.CheckboxColumn("Unresolved?"),
+        "BUYER_SUMMARY": st.column_config.TextColumn("Summary", width="large"),
+    }
+ 
     with tab1:
-        # Use normalize() for date comparison — pandas 3.0 safe
-        today_df = conv_filtered[conv_filtered["LAST_MSG_TIME"].dt.normalize() == today_ts]
+        latest_date = pd.Timestamp(data_end) if data_end else today_ts
+        today_df = conv_filtered[conv_filtered["LAST_MSG_TIME"].dt.normalize() == latest_date]
         today_sorted = today_df.sort_values(
-            "PRIORITY",
-            key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
+            "PRIORITY", key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
         )
         st.markdown(f"**{len(today_sorted)} conversations today** — sorted by priority")
         if today_sorted.empty:
             st.info("No conversations found for today.")
         else:
-            st.dataframe(
-                today_sorted[display_cols].reset_index(drop=True),
-                use_container_width=True,
-                height=450,
-                column_config={
-                    "CSAT_PROXY":   st.column_config.NumberColumn("CSAT (1-5)", format="%.1f"),
-                    "AVG_CRT_MINS": st.column_config.NumberColumn("CRT (mins)", format="%.0f"),
-                    "IS_UNRESOLVED": st.column_config.CheckboxColumn("Unresolved?"),
-                    "BUYER_SUMMARY": st.column_config.TextColumn("Summary", width="large"),
-                },
-            )
-
+            st.dataframe(today_sorted[display_cols].reset_index(drop=True),
+                         use_container_width=True, height=450, column_config=col_config_base)
+ 
     with tab2:
         all_sorted = conv_filtered.sort_values("LAST_MSG_TIME", ascending=False)
         st.markdown(f"**{len(all_sorted)} conversations** in filtered view")
-        st.dataframe(
-            all_sorted[display_cols].reset_index(drop=True),
-            use_container_width=True,
-            height=500,
-            column_config={
-                "CSAT_PROXY":   st.column_config.NumberColumn("CSAT (1-5)", format="%.1f"),
-                "AVG_CRT_MINS": st.column_config.NumberColumn("CRT (mins)", format="%.0f"),
-                "IS_UNRESOLVED": st.column_config.CheckboxColumn("Unresolved?"),
-                "BUYER_SUMMARY": st.column_config.TextColumn("Summary", width="large"),
-            },
-        )
-
+        st.dataframe(all_sorted[display_cols].reset_index(drop=True),
+                     use_container_width=True, height=500, column_config=col_config_base)
+ 
     with tab3:
         unres_df = conv_filtered[conv_filtered["IS_UNRESOLVED"]].sort_values(
-            "PRIORITY",
-            key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
+            "PRIORITY", key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
         )
-        st.markdown(
-            f"**{len(unres_df)} unresolved conversations** — contain stalling phrases without resolution"
-        )
+        st.markdown(f"**{len(unres_df)} unresolved conversations** — stalling phrases without resolution")
         if unres_df.empty:
             st.success("🎉 No unresolved conversations found!")
         else:
-            st.dataframe(
-                unres_df[display_cols].reset_index(drop=True),
-                use_container_width=True,
-                height=450,
-                column_config={
-                    "CSAT_PROXY":   st.column_config.NumberColumn("CSAT (1-5)", format="%.1f"),
-                    "AVG_CRT_MINS": st.column_config.NumberColumn("CRT (mins)", format="%.0f"),
-                    "IS_UNRESOLVED": st.column_config.CheckboxColumn("Unresolved?"),
-                    "BUYER_SUMMARY": st.column_config.TextColumn("Summary", width="large"),
-                },
-            )
-
+            st.dataframe(unres_df[display_cols].reset_index(drop=True),
+                         use_container_width=True, height=450, column_config=col_config_base)
+ 
     with tab4:
         st.markdown("### 💬 Suggested Reply Templates by Issue Type")
-        st.caption(
-            "Empathetic, resolution-oriented replies — replace [PLACEHOLDERS] before sending."
-        )
+        st.caption("Empathetic, resolution-oriented replies — replace [PLACEHOLDERS] before sending.")
         for issue_type, reply_text in SUGGESTED_REPLIES.items():
             if issue_type == "Other":
                 continue
@@ -1421,8 +1318,7 @@ def main():
                 <div class="reply-label">Suggested Reply</div>
                 <div class="reply-box">{reply_text}</div>
                 """, unsafe_allow_html=True)
-
-        # Per-conversation reply lookup
+ 
         st.markdown("---")
         st.markdown("### 🔍 Look Up Reply for a Specific Conversation")
         conv_ids = conv_filtered["CONVERSATION_ID"].tolist()
@@ -1439,125 +1335,105 @@ def main():
             <div class="reply-label">Buyer Summary</div>
             <div class="reply-box">{row['BUYER_SUMMARY']}</div>
             """, unsafe_allow_html=True)
+            # Look up reply from dict — column is not stored in memory
             suggested = SUGGESTED_REPLIES.get(str(row['ISSUE_TYPE']), SUGGESTED_REPLIES["Other"])
             st.markdown(f"""
             <div class="reply-label">Suggested Reply</div>
             <div class="reply-box">{suggested}</div>
             """, unsafe_allow_html=True)
-
-    # ── Tab 5 : WoW / MoM Performance ────────────────────────────────────────
+ 
     with tab5:
         st.markdown("### 📈 Week-on-Week & Month-on-Month Performance")
         wow_df, mom_df = compute_wow_mom(conv_filtered)
-
         wow_tab, mom_tab = st.tabs(["📅 Week-on-Week", "🗓️ Month-on-Month"])
-
+ 
         with wow_tab:
             if wow_df.empty:
                 st.info("Not enough data for weekly comparison.")
             else:
                 st.markdown("**Weekly Conversation Trend**")
-                wow_chart = wow_df.set_index("WEEK")[["Conversations"]].copy()
-                st.bar_chart(wow_chart, color="#00C4B4")
-
-                st.markdown("**Weekly Metrics Table**")
+                st.bar_chart(wow_df.set_index("WEEK")[["Conversations"]], color="#00C4B4")
                 disp_wow = wow_df.copy()
                 disp_wow["WEEK"] = disp_wow["WEEK"].dt.strftime("%d %b %Y")
                 disp_wow["Avg_CRT_mins"] = disp_wow["Avg_CRT_mins"].apply(
-                    lambda x: fmt_mins(x) if pd.notna(x) else "—"
-                )
+                    lambda x: fmt_mins(x) if pd.notna(x) else "—")
                 st.dataframe(
-                    disp_wow[["WEEK","Conversations","CRR_%","Avg_CSAT",
-                               "Avg_CRT_mins","Conversions",
-                               "Δ Conversations","Δ CRR_%","Δ Avg_CSAT"]].reset_index(drop=True),
+                    disp_wow[["WEEK","Conversations","CRR_%","Avg_CSAT","Avg_CRT_mins",
+                               "Conversions","Δ Conversations","Δ CRR_%","Δ Avg_CSAT"]].reset_index(drop=True),
                     use_container_width=True,
                     column_config={
-                        "WEEK":           st.column_config.TextColumn("Week Starting"),
-                        "CRR_%":          st.column_config.NumberColumn("CRR %", format="%.1f%%"),
-                        "Avg_CSAT":       st.column_config.NumberColumn("CSAT", format="%.2f"),
-                        "Conversions":    st.column_config.NumberColumn("Conversions"),
-                        "Δ Conversations":st.column_config.NumberColumn("Δ Conv", format="%+.0f"),
-                        "Δ CRR_%":        st.column_config.NumberColumn("Δ CRR%", format="%+.1f"),
-                        "Δ Avg_CSAT":     st.column_config.NumberColumn("Δ CSAT", format="%+.2f"),
+                        "WEEK":            st.column_config.TextColumn("Week Starting"),
+                        "CRR_%":           st.column_config.NumberColumn("CRR %", format="%.1f%%"),
+                        "Avg_CSAT":        st.column_config.NumberColumn("CSAT", format="%.2f"),
+                        "Conversions":     st.column_config.NumberColumn("Conversions"),
+                        "Δ Conversations": st.column_config.NumberColumn("Δ Conv", format="%+.0f"),
+                        "Δ CRR_%":         st.column_config.NumberColumn("Δ CRR%", format="%+.1f"),
+                        "Δ Avg_CSAT":      st.column_config.NumberColumn("Δ CSAT", format="%+.2f"),
                     },
                 )
-
+ 
         with mom_tab:
             if mom_df.empty:
                 st.info("Not enough data for monthly comparison.")
             else:
                 st.markdown("**Monthly Conversation Trend**")
-                mom_chart = mom_df.set_index("MONTH")[["Conversations"]].copy()
-                st.bar_chart(mom_chart, color="#FF6B35")
-
-                st.markdown("**Monthly Metrics Table**")
+                st.bar_chart(mom_df.set_index("MONTH")[["Conversations"]], color="#FF6B35")
                 disp_mom = mom_df.copy()
                 disp_mom["MONTH"] = disp_mom["MONTH"].dt.strftime("%b %Y")
                 disp_mom["Avg_CRT_mins"] = disp_mom["Avg_CRT_mins"].apply(
-                    lambda x: fmt_mins(x) if pd.notna(x) else "—"
-                )
+                    lambda x: fmt_mins(x) if pd.notna(x) else "—")
                 st.dataframe(
-                    disp_mom[["MONTH","Conversations","CRR_%","Avg_CSAT",
-                               "Avg_CRT_mins","Conversions",
-                               "Δ Conversations","Δ CRR_%","Δ Avg_CSAT"]].reset_index(drop=True),
+                    disp_mom[["MONTH","Conversations","CRR_%","Avg_CSAT","Avg_CRT_mins",
+                               "Conversions","Δ Conversations","Δ CRR_%","Δ Avg_CSAT"]].reset_index(drop=True),
                     use_container_width=True,
                     column_config={
-                        "MONTH":          st.column_config.TextColumn("Month"),
-                        "CRR_%":          st.column_config.NumberColumn("CRR %", format="%.1f%%"),
-                        "Avg_CSAT":       st.column_config.NumberColumn("CSAT", format="%.2f"),
-                        "Conversions":    st.column_config.NumberColumn("Conversions"),
-                        "Δ Conversations":st.column_config.NumberColumn("Δ Conv", format="%+.0f"),
-                        "Δ CRR_%":        st.column_config.NumberColumn("Δ CRR%", format="%+.1f"),
-                        "Δ Avg_CSAT":     st.column_config.NumberColumn("Δ CSAT", format="%+.2f"),
+                        "MONTH":           st.column_config.TextColumn("Month"),
+                        "CRR_%":           st.column_config.NumberColumn("CRR %", format="%.1f%%"),
+                        "Avg_CSAT":        st.column_config.NumberColumn("CSAT", format="%.2f"),
+                        "Conversions":     st.column_config.NumberColumn("Conversions"),
+                        "Δ Conversations": st.column_config.NumberColumn("Δ Conv", format="%+.0f"),
+                        "Δ CRR_%":         st.column_config.NumberColumn("Δ CRR%", format="%+.1f"),
+                        "Δ Avg_CSAT":      st.column_config.NumberColumn("Δ CSAT", format="%+.2f"),
                     },
                 )
-
-    # ── Tab 6 : Team Member Performance ──────────────────────────────────────
+ 
     with tab6:
         st.markdown("### 👥 Team Member Performance")
         st.caption(
             f"Data from **{TEAM_START_DATE.strftime('%d %b %Y')}** onwards · "
             f"Store → Agent mapping as configured in constants"
         )
-
         team_perf = compute_team_performance(conv_filtered)
-
+ 
         if team_perf.empty:
             st.info(
                 "No team performance data available. "
-                "This may be because no conversations fall within the tracking period "
-                f"(from {TEAM_START_DATE.strftime('%d %b %Y')}) or store codes don't match assignments."
+                f"Check that conversations exist from {TEAM_START_DATE.strftime('%d %b %Y')} "
+                "and that store codes match assignments."
             )
         else:
-            # ── KPI scorecards per agent ──────────────────────────────────────
             agents = team_perf["TEAM_MEMBER"].tolist()
-            agents_per_row = 3
-            for i in range(0, len(agents), agents_per_row):
-                cols = st.columns(agents_per_row)
-                for j, agent in enumerate(agents[i:i+agents_per_row]):
+            for i in range(0, len(agents), 3):
+                cols = st.columns(3)
+                for j, agent in enumerate(agents[i:i+3]):
                     row_a = team_perf[team_perf["TEAM_MEMBER"] == agent].iloc[0]
                     with cols[j]:
-                        st.markdown(
-                            f"""
-                            <div style="background:#1B2A4A;border-radius:10px;padding:14px;color:white;margin-bottom:8px;">
-                              <div style="font-size:16px;font-weight:700;color:#00C4B4;">👤 {agent}</div>
-                              <div style="font-size:11px;color:#aaa;margin-bottom:8px;">{row_a['Shift']}</div>
-                              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                                <div><span style="font-size:20px;font-weight:700">{int(row_a['Conversations'])}</span><br><span style="font-size:11px;color:#ccc;">Conversations</span></div>
-                                <div><span style="font-size:20px;font-weight:700">{row_a['CRR_%']:.1f}%</span><br><span style="font-size:11px;color:#ccc;">CRR</span></div>
-                                <div><span style="font-size:20px;font-weight:700">{row_a['Avg_CSAT']:.2f}</span><br><span style="font-size:11px;color:#ccc;">CSAT</span></div>
-                                <div><span style="font-size:20px;font-weight:700">{int(row_a['Avg_CRT_mins']) if pd.notna(row_a['Avg_CRT_mins']) else '—'}m</span><br><span style="font-size:11px;color:#ccc;">Avg CRT</span></div>
-                                <div><span style="font-size:20px;font-weight:700;color:#FF6B35">{int(row_a['Conversions'])}</span><br><span style="font-size:11px;color:#ccc;">Conversions</span></div>
-                                <div><span style="font-size:20px;font-weight:700;color:#f87171">{int(row_a['High_Priority'])}</span><br><span style="font-size:11px;color:#ccc;">High Priority</span></div>
-                              </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
+                        st.markdown(f"""
+                        <div style="background:#1B2A4A;border-radius:10px;padding:14px;color:white;margin-bottom:8px;">
+                          <div style="font-size:16px;font-weight:700;color:#00C4B4;">👤 {agent}</div>
+                          <div style="font-size:11px;color:#aaa;margin-bottom:8px;">{row_a['Shift']}</div>
+                          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                            <div><span style="font-size:20px;font-weight:700">{int(row_a['Conversations'])}</span><br><span style="font-size:11px;color:#ccc;">Conversations</span></div>
+                            <div><span style="font-size:20px;font-weight:700">{row_a['CRR_%']:.1f}%</span><br><span style="font-size:11px;color:#ccc;">CRR</span></div>
+                            <div><span style="font-size:20px;font-weight:700">{row_a['Avg_CSAT']:.2f}</span><br><span style="font-size:11px;color:#ccc;">CSAT</span></div>
+                            <div><span style="font-size:20px;font-weight:700">{int(row_a['Avg_CRT_mins']) if pd.notna(row_a['Avg_CRT_mins']) else '—'}m</span><br><span style="font-size:11px;color:#ccc;">Avg CRT</span></div>
+                            <div><span style="font-size:20px;font-weight:700;color:#FF6B35">{int(row_a['Conversions'])}</span><br><span style="font-size:11px;color:#ccc;">Conversions</span></div>
+                            <div><span style="font-size:20px;font-weight:700;color:#f87171">{int(row_a['High_Priority'])}</span><br><span style="font-size:11px;color:#ccc;">High Priority</span></div>
+                          </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+ 
             st.markdown("---")
-
-            # ── Summary table ─────────────────────────────────────────────────
             st.markdown("**Team Summary Table**")
             summary_cols = [
                 "TEAM_MEMBER", "Shift", "Conversations", "Resolved", "Unresolved",
@@ -1582,8 +1458,7 @@ def main():
                     "High_Priority": st.column_config.NumberColumn("High Pri."),
                 },
             )
-
-            # ── Per-agent drilldown ───────────────────────────────────────────
+ 
             st.markdown("---")
             st.markdown("**Drill Down by Agent**")
             agent_sel = st.selectbox("Select Agent", ["(All)"] + agents)
@@ -1594,8 +1469,7 @@ def main():
                     (conv_filtered["TEAM_MEMBER"] == agent_sel) &
                     (conv_filtered["LAST_MSG_TIME"] >= TEAM_START_DATE)
                 ]
-
-            # If "Others" selected, show a sub-breakdown by store code
+ 
             if agent_sel == "Others" and not drilldown_df.empty:
                 st.markdown("**Others — Store Code Breakdown**")
                 others_summary = (
@@ -1621,22 +1495,18 @@ def main():
                         "Unresolved":    st.column_config.NumberColumn("Unresolved"),
                         "Avg_CSAT":      st.column_config.NumberColumn("CSAT", format="%.1f"),
                         "CRR%":          st.column_config.NumberColumn("CRR %", format="%.1f%%"),
-                    }
-                )
+                    })
                 st.markdown("**All Conversations — Others**")
-
-            drill_cols = [
-                "CONVERSATION_ID", "STORE_CODE", "CHANNEL_NAME",
-                "SITE_NICK_NAME_ID", "COUNTRY_CODE",
-                "BUYER_NAME", "LAST_MSG_TIME", "ISSUE_TYPE", "PRIORITY",
+ 
+            drill_cols = [c for c in [
+                "CONVERSATION_ID", "STORE_CODE", "CHANNEL_NAME", "SITE_NICK_NAME_ID",
+                "COUNTRY_CODE", "BUYER_NAME", "LAST_MSG_TIME", "ISSUE_TYPE", "PRIORITY",
                 "SENTIMENT", "IS_RESOLVED", "CSAT_PROXY", "AVG_CRT_MINS",
                 "IS_CONVERSION", "TEAM_MEMBER",
-            ]
-            available_drill = [c for c in drill_cols if c in drilldown_df.columns]
+            ] if c in drilldown_df.columns]
             st.dataframe(
-                drilldown_df[available_drill].sort_values("LAST_MSG_TIME", ascending=False).reset_index(drop=True),
-                use_container_width=True,
-                height=400,
+                drilldown_df[drill_cols].sort_values("LAST_MSG_TIME", ascending=False).reset_index(drop=True),
+                use_container_width=True, height=400,
                 column_config={
                     "CSAT_PROXY":    st.column_config.NumberColumn("CSAT", format="%.1f"),
                     "AVG_CRT_MINS":  st.column_config.NumberColumn("CRT(m)", format="%.0f"),
@@ -1644,11 +1514,10 @@ def main():
                     "IS_CONVERSION": st.column_config.CheckboxColumn("Conversion?"),
                 },
             )
-
-            # ── Others — stores not assigned to any agent ─────────────────────
+ 
             st.markdown("---")
             st.markdown("**🔍 Unassigned / Other Stores in This Data**")
-            st.caption("Based on current sidebar filters — change filters to see different stores.")
+            st.caption("Based on current sidebar filters.")
             all_known = set(STORE_TO_AGENT.keys())
             if "STORE_CODE" in conv_filtered.columns:
                 others_stores = sorted(
@@ -1659,37 +1528,20 @@ def main():
                     others_rows = []
                     for sc in others_stores:
                         sc_df = conv_filtered[conv_filtered["STORE_CODE"] == sc]
-                        # Most common site nickname, channel & country for this store
-                        site = (
-                            sc_df["SITE_NICK_NAME_ID"].mode().iloc[0]
-                            if "SITE_NICK_NAME_ID" in sc_df.columns and not sc_df["SITE_NICK_NAME_ID"].dropna().empty
-                            else "—"
-                        )
-                        channel = (
-                            sc_df["CHANNEL_NAME"].mode().iloc[0]
-                            if "CHANNEL_NAME" in sc_df.columns and not sc_df["CHANNEL_NAME"].replace("", pd.NA).dropna().empty
-                            else "—"
-                        )
-                        country = (
-                            sc_df["COUNTRY_CODE"].mode().iloc[0]
-                            if "COUNTRY_CODE" in sc_df.columns and not sc_df["COUNTRY_CODE"].dropna().empty
-                            else "—"
-                        )
-                        platform = (
-                            sc_df["PLATFORM"].mode().iloc[0]
-                            if "PLATFORM" in sc_df.columns and not sc_df["PLATFORM"].dropna().empty
-                            else "—"
-                        )
+                        site = sc_df["SITE_NICK_NAME_ID"].mode().iloc[0] if "SITE_NICK_NAME_ID" in sc_df.columns and not sc_df["SITE_NICK_NAME_ID"].dropna().empty else "—"
+                        channel = sc_df["CHANNEL_NAME"].mode().iloc[0] if "CHANNEL_NAME" in sc_df.columns and not sc_df["CHANNEL_NAME"].replace("", pd.NA).dropna().empty else "—"
+                        country = sc_df["COUNTRY_CODE"].mode().iloc[0] if "COUNTRY_CODE" in sc_df.columns and not sc_df["COUNTRY_CODE"].dropna().empty else "—"
+                        platform = sc_df["PLATFORM"].mode().iloc[0] if "PLATFORM" in sc_df.columns and not sc_df["PLATFORM"].dropna().empty else "—"
                         others_rows.append({
-                            "Store Code":      sc,
-                            "Channel Name":    channel,
-                            "Site Nickname":   site,
-                            "Platform":        platform,
-                            "Country":         country,
-                            "Conversations":   len(sc_df),
-                            "Unresolved":      int(sc_df["IS_UNRESOLVED"].sum()) if "IS_UNRESOLVED" in sc_df.columns else 0,
-                            "Avg CSAT":        round(sc_df["CSAT_PROXY"].mean(), 1) if "CSAT_PROXY" in sc_df.columns else "—",
-                            "Assign To":       "⚠️ Not assigned",
+                            "Store Code":    sc,
+                            "Channel Name":  channel,
+                            "Site Nickname": site,
+                            "Platform":      platform,
+                            "Country":       country,
+                            "Conversations": len(sc_df),
+                            "Unresolved":    int(sc_df["IS_UNRESOLVED"].sum()) if "IS_UNRESOLVED" in sc_df.columns else 0,
+                            "Avg CSAT":      round(sc_df["CSAT_PROXY"].mean(), 1) if "CSAT_PROXY" in sc_df.columns else "—",
+                            "Assign To":     "⚠️ Not assigned",
                         })
                     others_df = pd.DataFrame(others_rows).sort_values("Conversations", ascending=False)
                     st.dataframe(others_df, use_container_width=True, hide_index=True,
@@ -1697,26 +1549,19 @@ def main():
                             "Conversations": st.column_config.NumberColumn("Conv", format="%d"),
                             "Unresolved":    st.column_config.NumberColumn("Unresolved", format="%d"),
                             "Avg CSAT":      st.column_config.NumberColumn("CSAT", format="%.1f"),
-                        }
-                    )
-                    st.warning(
-                        f"⚠️ **{len(others_stores)} store(s)** found with no team member assigned. "
-                        "Share these store codes to get them added to the team assignments."
-                    )
+                        })
+                    st.warning(f"⚠️ **{len(others_stores)} store(s)** found with no team member assigned.")
                 else:
                     st.success("✅ All stores in this dataset are assigned to team members.")
-
-            # ── Store assignments reference ───────────────────────────────────
+ 
             with st.expander("📋 Store → Agent Assignment Reference"):
-                assign_rows = []
-                for agent_name, stores in TEAM_ASSIGNMENTS.items():
-                    assign_rows.append({
-                        "Agent":           agent_name,
-                        "Shift":           AGENT_SHIFT.get(agent_name, "Day"),
-                        "Assigned Stores": ", ".join(stores),
-                    })
+                assign_rows = [
+                    {"Agent": agent_name, "Shift": AGENT_SHIFT.get(agent_name, "Day"),
+                     "Assigned Stores": ", ".join(stores)}
+                    for agent_name, stores in TEAM_ASSIGNMENTS.items()
+                ]
                 st.dataframe(pd.DataFrame(assign_rows), use_container_width=True, hide_index=True)
-
+ 
     # ── Issue Breakdown Table ─────────────────────────────────────────────────
     st.markdown('<div class="section-title">📂 Issue Type Breakdown</div>', unsafe_allow_html=True)
     ib = (
@@ -1731,16 +1576,16 @@ def main():
         .reset_index()
         .sort_values("Count", ascending=False)
     )
-    ib["Avg_CSAT"] = ib["Avg_CSAT"].round(1)
+    ib["Avg_CSAT"]     = ib["Avg_CSAT"].round(1)
     ib["Avg_CRT_mins"] = ib["Avg_CRT_mins"].round(0).fillna(0).astype(int)
-    ib["Unresolved"] = ib["Unresolved"].astype(int)
+    ib["Unresolved"]   = ib["Unresolved"].astype(int)
     st.dataframe(ib, use_container_width=True, height=300)
-
+ 
     # ── Store Performance ─────────────────────────────────────────────────────
     st.markdown('<div class="section-title">🏪 Store Performance</div>', unsafe_allow_html=True)
     sp = (
         conv_filtered
-        .groupby(["STORE_CODE", "PLATFORM"])
+        .groupby(["STORE_CODE", "PLATFORM", "COUNTRY_CODE"])
         .agg(
             Conversations=("CONVERSATION_ID", "count"),
             Unresolved=("IS_UNRESOLVED", "sum"),
@@ -1751,24 +1596,42 @@ def main():
         .reset_index()
         .sort_values("Conversations", ascending=False)
     )
-    sp["Avg_CSAT"] = sp["Avg_CSAT"].round(1)
+    sp["Avg_CSAT"]     = sp["Avg_CSAT"].round(1)
     sp["Avg_CRT_mins"] = sp["Avg_CRT_mins"].round(0).fillna(0).astype(int)
-    sp["Unresolved"] = sp["Unresolved"].astype(int)
-    sp["CRR%"] = ((sp["Conversations"] - sp["Unresolved"]) / sp["Conversations"] * 100).round(1)
-    st.dataframe(sp, use_container_width=True, height=350)
-
+    sp["Unresolved"]   = sp["Unresolved"].astype(int)
+    sp["CRR%"]         = ((sp["Conversations"] - sp["Unresolved"]) / sp["Conversations"] * 100).round(1)
+    # Reorder columns so Country appears after Platform
+    sp = sp[["STORE_CODE", "PLATFORM", "COUNTRY_CODE", "Conversations",
+             "Unresolved", "CRR%", "Avg_CSAT", "Avg_CRT_mins", "Negative_Sent"]]
+    st.dataframe(
+        sp,
+        use_container_width=True,
+        height=350,
+        column_config={
+            "STORE_CODE":   st.column_config.TextColumn("Store Code"),
+            "PLATFORM":     st.column_config.TextColumn("Platform"),
+            "COUNTRY_CODE": st.column_config.TextColumn("Country"),
+            "Conversations":st.column_config.NumberColumn("Conversations"),
+            "Unresolved":   st.column_config.NumberColumn("Unresolved"),
+            "CRR%":         st.column_config.NumberColumn("CRR %", format="%.1f%%"),
+            "Avg_CSAT":     st.column_config.NumberColumn("CSAT", format="%.1f"),
+            "Avg_CRT_mins": st.column_config.NumberColumn("CRT (min)", format="%d"),
+            "Negative_Sent":st.column_config.NumberColumn("Negative Sent"),
+        },
+    )
+ 
     # ── Excel Download ────────────────────────────────────────────────────────
     st.markdown('<div class="section-title">⬇️ Download Report</div>', unsafe_allow_html=True)
-    cutoff_7d = today_ts - pd.Timedelta(days=6)
-    conv_7day = conv_df[conv_df["LAST_MSG_TIME"] >= cutoff_7d].copy()
-
+    cutoff_7d  = pd.Timestamp(data_end) - pd.Timedelta(days=6)
+    conv_7day  = conv_df[conv_df["LAST_MSG_TIME"] >= cutoff_7d].copy()
+ 
     dl_col1, dl_col2 = st.columns(2)
     with dl_col1:
-        if st.button(f"📊 Generate Last 7 Days Report", use_container_width=True):
+        if st.button("📊 Generate Last 7 Days Report", use_container_width=True):
             with st.spinner("Building report…"):
                 excel_7day = build_excel(conv_7day, today_str)
             st.download_button(
-                label=f"📥 Download ({cutoff_7d.date()} → {today_date})",
+                label=f"📥 Download ({cutoff_7d.date()} → {data_end})",
                 data=excel_7day,
                 file_name=f"Chat_Analysis_Last7Days_{today_str}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1790,7 +1653,7 @@ def main():
         "**Last 7 Days** = default daily export · "
         "**Filtered View** = matches current sidebar selection."
     )
-
-
+ 
+ 
 if __name__ == "__main__":
     main()
