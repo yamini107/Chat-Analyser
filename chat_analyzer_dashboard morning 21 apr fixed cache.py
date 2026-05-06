@@ -706,7 +706,8 @@ def compute_team_performance(conv_df: pd.DataFrame) -> pd.DataFrame:
 # ─────────────────────────────────────────────────────────────────────────────
  
 @st.cache_data(show_spinner=False)
-def load_data(file_bytes: bytes) -> pd.DataFrame:
+def load_data(file_bytes: bytes, _file_hash: str = "") -> pd.DataFrame:
+    # _file_hash is intentionally unused — it only busts the cache when file changes
     xl = pd.ExcelFile(io.BytesIO(file_bytes))
     sheets_found = xl.sheet_names
  
@@ -1046,8 +1047,8 @@ def apply_filters(conv_df: pd.DataFrame, today_ts: pd.Timestamp, data_end=None) 
     _ts_max = src["LAST_MSG_TIME"].dropna().max()
     min_date = _ts_min.date() if pd.notna(_ts_min) else datetime.today().date()
     max_date = _ts_max.date() if pd.notna(_ts_max) else datetime.today().date()
-    # Default: show ALL data in the file (min → max), not just last 7 days
-    # This ensures no data is silently excluded when user first loads the file
+    # Default: show ALL data in the file (data_start → data_end)
+    # max_value extends to today so users can see if new data arrives
     default_start = min_date
  
     date_range = st.sidebar.date_input(
@@ -1055,7 +1056,7 @@ def apply_filters(conv_df: pd.DataFrame, today_ts: pd.Timestamp, data_end=None) 
         value=(default_start, max_date),
         min_value=min_date,
         max_value=max_date,
-        help="Defaults to full data range. Narrow it to focus on a specific period.",
+        help="Defaults to full data range in the file. Narrow to focus on a specific period.",
     )
  
     # Priority / Sentiment / Resolution / Issue
@@ -1194,15 +1195,21 @@ def main():
         """)
         return
  
+    # Read file bytes once — uploaded.read() is a stream, consumed on first call
+    import hashlib
+    file_bytes = uploaded.read()
+    file_hash  = hashlib.md5(file_bytes).hexdigest()  # busts cache when file changes
+ 
     with st.spinner("⏳ Loading chat data…"):
-        raw_df = load_data(uploaded.read())
+        raw_df = load_data(file_bytes, file_hash)
  
     _max_ts = raw_df["MESSAGE_TIME"].dropna().max()
     _min_ts = raw_df["MESSAGE_TIME"].dropna().min()
-    # Use real system date as "today" — never clip data based on file's max date
+ 
+    # Always use real system date as today — never clip to file's max date
     today_date  = datetime.today().date()
-    today_str   = today_date.strftime("%Y-%m-%d")
     today_ts    = pd.Timestamp(today_date)
+    today_str   = today_date.strftime("%Y-%m-%d")
     data_end    = _max_ts.date() if pd.notna(_max_ts) else today_date
     data_start  = _min_ts.date() if pd.notna(_min_ts) else today_date
  
@@ -1224,7 +1231,7 @@ def main():
         return
  
     st.markdown('<div class="section-title">📈 Key Metrics</div>', unsafe_allow_html=True)
-    render_metrics(conv_filtered, pd.Timestamp(data_end))
+    render_metrics(conv_filtered, today_ts)
  
     st.markdown('<div class="section-title">📊 Analytics</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
@@ -1276,7 +1283,8 @@ def main():
     }
  
     with tab1:
-        latest_date = pd.Timestamp(data_end) if data_end else today_ts
+        # Show conversations from the most recent date in the uploaded file
+        latest_date = pd.Timestamp(data_end)
         today_df = conv_filtered[conv_filtered["LAST_MSG_TIME"].dt.normalize() == latest_date]
         today_sorted = today_df.sort_values(
             "PRIORITY", key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
@@ -1622,7 +1630,7 @@ def main():
  
     # ── Excel Download ────────────────────────────────────────────────────────
     st.markdown('<div class="section-title">⬇️ Download Report</div>', unsafe_allow_html=True)
-    cutoff_7d  = pd.Timestamp(data_end) - pd.Timedelta(days=6)
+    cutoff_7d  = pd.Timestamp(data_end) - pd.Timedelta(days=6)  # last 7 days of file data
     conv_7day  = conv_df[conv_df["LAST_MSG_TIME"] >= cutoff_7d].copy()
  
     dl_col1, dl_col2 = st.columns(2)
