@@ -1585,7 +1585,7 @@ def main():
     st.markdown('<div class="section-title">🏪 Store Performance</div>', unsafe_allow_html=True)
     sp = (
         conv_filtered
-        .groupby(["STORE_CODE", "PLATFORM"])
+        .groupby(["STORE_CODE", "PLATFORM", "COUNTRY_CODE"])
         .agg(
             Conversations=("CONVERSATION_ID", "count"),
             Unresolved=("IS_UNRESOLVED", "sum"),
@@ -1600,7 +1600,25 @@ def main():
     sp["Avg_CRT_mins"] = sp["Avg_CRT_mins"].round(0).fillna(0).astype(int)
     sp["Unresolved"]   = sp["Unresolved"].astype(int)
     sp["CRR%"]         = ((sp["Conversations"] - sp["Unresolved"]) / sp["Conversations"] * 100).round(1)
-    st.dataframe(sp, use_container_width=True, height=350)
+    # Reorder columns so Country appears after Platform
+    sp = sp[["STORE_CODE", "PLATFORM", "COUNTRY_CODE", "Conversations",
+             "Unresolved", "CRR%", "Avg_CSAT", "Avg_CRT_mins", "Negative_Sent"]]
+    st.dataframe(
+        sp,
+        use_container_width=True,
+        height=350,
+        column_config={
+            "STORE_CODE":   st.column_config.TextColumn("Store Code"),
+            "PLATFORM":     st.column_config.TextColumn("Platform"),
+            "COUNTRY_CODE": st.column_config.TextColumn("Country"),
+            "Conversations":st.column_config.NumberColumn("Conversations"),
+            "Unresolved":   st.column_config.NumberColumn("Unresolved"),
+            "CRR%":         st.column_config.NumberColumn("CRR %", format="%.1f%%"),
+            "Avg_CSAT":     st.column_config.NumberColumn("CSAT", format="%.1f"),
+            "Avg_CRT_mins": st.column_config.NumberColumn("CRT (min)", format="%d"),
+            "Negative_Sent":st.column_config.NumberColumn("Negative Sent"),
+        },
+    )
 
     # ── Excel Download ────────────────────────────────────────────────────────
     st.markdown('<div class="section-title">⬇️ Download Report</div>', unsafe_allow_html=True)
