@@ -722,9 +722,184 @@ def compute_team_performance(conv_df: pd.DataFrame) -> pd.DataFrame:
 # DATA LOADING
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _repair_streaming_xlsx(file_bytes: bytes) -> bytes:
+    """
+    Repair a streaming XLSX (Google Sheets / some exporters) that is missing
+    the End-of-Central-Directory record AND required OOXML metadata files
+    ([Content_Types].xml, xl/workbook.xml, _rels/.rels, xl/_rels/workbook.xml.rels).
+    Scans local-file headers, decompresses each entry, injects any missing
+    metadata stubs, and writes a proper ZIP so openpyxl / pandas can read it.
+    Returns original bytes unchanged if already a valid ZIP.
+    """
+    import zipfile as _zf, struct as _st, zlib as _zl, re as _re
+
+    # Quick check — if already valid, return as-is
+    try:
+        with _zf.ZipFile(io.BytesIO(file_bytes)):
+            pass
+        return file_bytes
+    except _zf.BadZipFile:
+        pass
+
+    data = bytearray(file_bytes)
+    extracted = {}   # fname → content (bytes)
+
+    pos = 0
+    while pos < len(data) - 30:
+        idx = data.find(b"PK\x03\x04", pos)
+        if idx == -1:
+            break
+        try:
+            (_, _, flag, method, _, _, _,
+             comp_size, uncomp_size,
+             fname_len, extra_len) = _st.unpack_from("<4sHHHHHIIIHH", data, idx)
+            fname = data[idx+30: idx+30+fname_len].decode("utf-8", errors="replace")
+            data_start = idx + 30 + fname_len + extra_len
+            raw = bytes(data[data_start:])
+
+            if method == 8:       # DEFLATE (streaming — comp_size may be 0)
+                d = _zl.decompressobj(-15)
+                content = b""
+                i = 0
+                while i < len(raw):
+                    try:
+                        content += d.decompress(raw[i:i+65536])
+                        i += 65536
+                    except _zl.error:
+                        break
+            elif method == 0:     # STORED
+                content = raw[:uncomp_size] if uncomp_size > 0 else b""
+            else:
+                pos = idx + 4
+                continue
+
+            if fname and content:
+                # Fix truncated sharedStrings.xml — patch to last complete </si>
+                if fname == "xl/sharedStrings.xml" and b"</sst>" not in content:
+                    last_si = content.rfind(b"</si>")
+                    if last_si != -1:
+                        content = content[:last_si + 5] + b"\n</sst>"
+                extracted[fname] = content
+        except Exception:
+            pass
+        pos = idx + 4
+
+    if not extracted:
+        return file_bytes   # Nothing extracted — let caller handle error
+
+    # ── Determine how many sheets exist ───────────────────────────────────────
+    sheet_keys = sorted(
+        [k for k in extracted if k.startswith("xl/worksheets/sheet") and k.endswith(".xml")],
+        key=lambda x: int(_re.search(r"sheet(\d+)", x).group(1)) if _re.search(r"sheet(\d+)", x) else 0
+    )
+    n_sheets = len(sheet_keys)
+
+    # ── Inject [Content_Types].xml if missing ─────────────────────────────────
+    if "[Content_Types].xml" not in extracted:
+        sheet_overrides = "\n".join(
+            f'  <Override PartName="/xl/worksheets/sheet{i+1}.xml" '
+            f'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            for i in range(n_sheets)
+        )
+        extracted["[Content_Types].xml"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n'
+            '  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n'
+            '  <Default Extension="xml" ContentType="application/xml"/>\n'
+            '  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>\n'
+            '  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>\n'
+            '  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>\n'
+            + sheet_overrides + "\n"
+            "</Types>"
+        ).encode("utf-8")
+
+    # ── Inject _rels/.rels if missing ─────────────────────────────────────────
+    if "_rels/.rels" not in extracted:
+        extracted["_rels/.rels"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+            '  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>\n'
+            "</Relationships>"
+        ).encode("utf-8")
+
+    # ── Inject xl/workbook.xml if missing ─────────────────────────────────────
+    if "xl/workbook.xml" not in extracted:
+        sheet_elems = "\n".join(
+            f'    <sheet name="Sheet{i+1}" sheetId="{i+1}" r:id="rId{i+1}"/>'
+            for i in range(n_sheets)
+        )
+        extracted["xl/workbook.xml"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"\n'
+            '  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">\n'
+            '  <sheets>\n'
+            + sheet_elems + "\n"
+            "  </sheets>\n"
+            "</workbook>"
+        ).encode("utf-8")
+
+    # ── Inject xl/_rels/workbook.xml.rels if missing ──────────────────────────
+    if "xl/_rels/workbook.xml.rels" not in extracted:
+        rels = []
+        for i in range(n_sheets):
+            rels.append(
+                f'  <Relationship Id="rId{i+1}" '
+                f'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+                f'Target="worksheets/sheet{i+1}.xml"/>'
+            )
+        if "xl/sharedStrings.xml" in extracted:
+            rels.append(
+                f'  <Relationship Id="rId{n_sheets+1}" '
+                f'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" '
+                f'Target="sharedStrings.xml"/>'
+            )
+        extracted["xl/_rels/workbook.xml.rels"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+            + "\n".join(rels) + "\n"
+            "</Relationships>"
+        ).encode("utf-8")
+
+    # ── Inject minimal xl/styles.xml if missing ───────────────────────────────
+    if "xl/styles.xml" not in extracted:
+        extracted["xl/styles.xml"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">\n'
+            '  <fonts><font><sz val="11"/><name val="Calibri"/></font></fonts>\n'
+            '  <fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>\n'
+            '  <borders><border><left/><right/><top/><bottom/><diagonal/></border></borders>\n'
+            '  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>\n'
+            '  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>\n'
+            "</styleSheet>"
+        ).encode("utf-8")
+
+    # ── Write repaired ZIP ────────────────────────────────────────────────────
+    new_zip = io.BytesIO()
+    with _zf.ZipFile(new_zip, "w", compression=_zf.ZIP_DEFLATED) as zout:
+        # [Content_Types].xml must be first
+        for priority in ["[Content_Types].xml", "_rels/.rels",
+                         "xl/workbook.xml", "xl/_rels/workbook.xml.rels",
+                         "xl/styles.xml", "xl/sharedStrings.xml"]:
+            if priority in extracted:
+                zout.writestr(priority, extracted[priority])
+        # Then all other files
+        for fname, content in extracted.items():
+            if fname not in ["[Content_Types].xml", "_rels/.rels",
+                              "xl/workbook.xml", "xl/_rels/workbook.xml.rels",
+                              "xl/styles.xml", "xl/sharedStrings.xml"]:
+                zout.writestr(fname, content)
+
+    new_zip.seek(0)
+    return new_zip.read()
+
+
 @st.cache_data(show_spinner=False)
 def load_data(file_bytes: bytes, _file_hash: str = "") -> pd.DataFrame:
     # _file_hash is intentionally unused — it only busts the Streamlit cache when the file changes
+
+    # Repair streaming/truncated XLSX (Google Sheets exports missing EOCD record)
+    file_bytes = _repair_streaming_xlsx(file_bytes)
+
     xl = pd.ExcelFile(io.BytesIO(file_bytes))
     sheets_found = xl.sheet_names
 
@@ -741,6 +916,20 @@ def load_data(file_bytes: bytes, _file_hash: str = "") -> pd.DataFrame:
             platform = "Unknown"
 
         df = xl.parse(s, dtype=str)
+
+        # ── Auto-detect platform from SITE_NICK_NAME_ID if sheet name gives no hint ──
+        # Handles sheets named generically like "Sheet1", "Apr", "May" etc.
+        if platform == "Unknown" and "SITE_NICK_NAME_ID" in df.columns:
+            sample_sites = df["SITE_NICK_NAME_ID"].dropna().astype(str).str.lower()
+            if sample_sites.str.contains("shopee").any():
+                platform = "Shopee"
+            elif sample_sites.str.contains("lazada").any():
+                platform = "Lazada"
+            elif sample_sites.str.contains("tiktok|tik_tok").any():
+                platform = "TikTok"
+
+        # Skip sheets that are clearly not chat data (no recognisable platform)
+        # but keep Unknown so we don't silently drop new platforms
         df["PLATFORM"] = platform
 
         # ── Normalise column name variants across different sheet formats ──
@@ -1336,7 +1525,9 @@ def main():
         for i, plat in enumerate(all_platforms):
             plat_df   = conv_filtered[conv_filtered["PLATFORM"] == plat]
             plat_crr  = round(plat_df["IS_RESOLVED"].sum() / len(plat_df) * 100, 1) if len(plat_df) else 0
-            plat_csat = plat_df["CSAT_PROXY"].mean()
+            plat_csat_raw = plat_df["CSAT_PROXY"].mean()
+            # Fix: compute the display string BEFORE embedding in f-string
+            plat_csat_str = f"{plat_csat_raw:.1f}" if not pd.isna(plat_csat_raw) else "—"
             bg_color  = plat_colors.get(plat, "#1B2A4A")
             with pcols[i]:
                 st.markdown(f"""
@@ -1346,7 +1537,7 @@ def main():
                   <div style="font-size:11px;opacity:0.75;">conversations</div>
                   <div style="display:flex;gap:12px;margin-top:8px;font-size:12px;">
                     <span>CRR {plat_crr}%</span>
-                    <span>CSAT {plat_csat:.1f if not pd.isna(plat_csat) else "—"}</span>
+                    <span>CSAT {plat_csat_str}</span>
                   </div>
                 </div>
                 """, unsafe_allow_html=True)
