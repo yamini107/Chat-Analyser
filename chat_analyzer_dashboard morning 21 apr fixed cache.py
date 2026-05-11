@@ -1,6 +1,6 @@
 """
-Chat Analyzer Dashboard — Shopee & Lazada
-==========================================
+Chat Analyzer Dashboard — Shopee, Lazada & TikTok
+==================================================
 Graas.ai-themed Streamlit app for daily chat enquiry analysis.
 
 Run:  streamlit run chat_analyzer_dashboard.py
@@ -140,6 +140,9 @@ section[data-testid="stSidebar"] strong { color: #00C4B4 !important; }
     margin-top: 0.5rem;
 }
 .reply-label { font-size:0.75rem; color:#00C4B4; font-weight:700; text-transform:uppercase; margin-bottom:4px; }
+
+/* ── TikTok platform card ── */
+.tiktok-card { border-left-color: #010101 !important; }
 
 /* ── Upload area ── */
 .upload-area {
@@ -667,6 +670,9 @@ def compute_wow_mom(conv_df: pd.DataFrame) -> tuple:
                 Negative=("SENTIMENT", lambda x: (x == "Negative").sum()),
                 Positive=("SENTIMENT", lambda x: (x == "Positive").sum()),
                 Conversions=("IS_CONVERSION", "sum"),
+                TikTok=("PLATFORM", lambda x: (x == "TikTok").sum()),
+                Shopee=("PLATFORM", lambda x: (x == "Shopee").sum()),
+                Lazada=("PLATFORM", lambda x: (x == "Lazada").sum()),
             )
             .reset_index()
             .sort_values(period_col)
@@ -729,6 +735,8 @@ def load_data(file_bytes: bytes, _file_hash: str = "") -> pd.DataFrame:
             platform = "Lazada"
         elif "shopee" in name_lower:
             platform = "Shopee"
+        elif "tiktok" in name_lower or "tik_tok" in name_lower or "tik tok" in name_lower:
+            platform = "TikTok"
         else:
             platform = "Unknown"
 
@@ -747,6 +755,38 @@ def load_data(file_bytes: bytes, _file_hash: str = "") -> pd.DataFrame:
         if "MESSAGE_PARSED" not in df.columns:
             if "MESSAGE" in df.columns:
                 df = df.rename(columns={"MESSAGE": "MESSAGE_PARSED"})
+            elif "CONTENT" in df.columns:
+                df = df.rename(columns={"CONTENT": "MESSAGE_PARSED"})
+            elif "MSG_CONTENT" in df.columns:
+                df = df.rename(columns={"MSG_CONTENT": "MESSAGE_PARSED"})
+
+        # TikTok may use CHAT_ID or SESSION_ID instead of CONVERSATION_ID
+        if "CONVERSATION_ID" not in df.columns:
+            if "CHAT_ID" in df.columns:
+                df = df.rename(columns={"CHAT_ID": "CONVERSATION_ID"})
+            elif "SESSION_ID" in df.columns:
+                df = df.rename(columns={"SESSION_ID": "CONVERSATION_ID"})
+
+        # TikTok may use SHOP_CODE or SELLER_ID instead of STORE_CODE
+        if "STORE_CODE" not in df.columns:
+            if "SHOP_CODE" in df.columns:
+                df = df.rename(columns={"SHOP_CODE": "STORE_CODE"})
+            elif "SELLER_ID" in df.columns:
+                df = df.rename(columns={"SELLER_ID": "STORE_CODE"})
+
+        # TikTok may use USER or CUSTOMER_NAME instead of BUYER_NAME
+        if "BUYER_NAME" not in df.columns:
+            if "USER" in df.columns:
+                df = df.rename(columns={"USER": "BUYER_NAME"})
+            elif "CUSTOMER_NAME" in df.columns:
+                df = df.rename(columns={"CUSTOMER_NAME": "BUYER_NAME"})
+
+        # TikTok may use ROLE or FROM instead of SENDER
+        if "SENDER" not in df.columns:
+            if "ROLE" in df.columns:
+                df = df.rename(columns={"ROLE": "SENDER"})
+            elif "FROM" in df.columns:
+                df = df.rename(columns={"FROM": "SENDER"})
 
         # Skip sheets that still have no MESSAGE_TIME (unrelated/summary sheets)
         if "MESSAGE_TIME" not in df.columns:
@@ -962,7 +1002,10 @@ def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
             ["Avg Chat Response Time (CRT)", fmt_mins(avg_crt)],
             ["Avg CSAT Proxy Score (1–5)", round(avg_csat, 2) if not np.isnan(avg_csat) else "—"],
             ["Today's High Priority Chats", hi_today],
-            ["Platforms", ", ".join(df["PLATFORM"].astype(str).unique().tolist())],
+            ["Platforms", ", ".join(sorted(df["PLATFORM"].astype(str).unique().tolist()))],
+            ["Shopee Conversations", int((df["PLATFORM"] == "Shopee").sum())],
+            ["Lazada Conversations", int((df["PLATFORM"] == "Lazada").sum())],
+            ["TikTok Conversations", int((df["PLATFORM"] == "TikTok").sum())],
         ]
         for i, (label, val) in enumerate(summary_data, start=3):
             ws1.write(i, 0, label, sub_fmt)
@@ -1032,7 +1075,7 @@ def render_header():
         <div class="graas-logo">📊</div>
         <div>
             <h1>Chat Analyzer Dashboard</h1>
-            <p>Graas.ai · Shopee & Lazada · Sentiment · CSAT · Unresolved Detection · Suggested Replies</p>
+            <p>Graas.ai · Shopee, Lazada & TikTok · Sentiment · CSAT · Unresolved Detection · Suggested Replies</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1051,7 +1094,7 @@ def render_metrics(conv_df: pd.DataFrame, today_ts: pd.Timestamp):
 
     cols = st.columns(8)
     metrics = [
-        (cols[0], "🗣️ Total Convs", f"{total:,}",   "7-day window", ""),
+        (cols[0], "🗣️ Total Convs", f"{total:,}",   "all platforms", ""),
         (cols[1], "📅 Today",       f"{len(today_conv):,}", "conversations", "navy"),
         (cols[2], "✅ Resolved",    f"{resolved:,}", f"CRR {crr}%", "green"),
         (cols[3], "🔴 Unresolved",  f"{unresolved:,}", "need action", "red"),
@@ -1221,7 +1264,7 @@ def main():
 
     st.markdown('<div class="section-title">📂 Upload Chat Data</div>', unsafe_allow_html=True)
     uploaded = st.file_uploader(
-        "Upload Excel file with sheets: lazada_chat_enquiries & shopee_chat_enquiries",
+        "Upload Excel file with sheets: lazada_chat_enquiries, shopee_chat_enquiries & tiktok_chat_enquiries",
         type=["xlsx"],
         help="Single Excel file containing both Lazada and Shopee chat sheets.",
     )
@@ -1232,6 +1275,7 @@ def main():
         **Expected Excel format:**
         - Sheet 1: `lazada_chat_enquiries`
         - Sheet 2: `shopee_chat_enquiries`
+        - Sheet 3: `tiktok_chat_enquiries` *(optional)*
         - Columns: `STORE_CODE`, `SITE_NICK_NAME_ID`, `COUNTRY_CODE`, `CONVERSATION_ID`,
           `IS_READ`, `IS_ANSWERED`, `MESSAGE_TIME`, `BUYER_NAME`, `MESSAGE_PARSED`,
           `MESSAGE_TYPE`, `MESSAGE_ID`, `SENDER`, `BUYER_ID`
@@ -1256,10 +1300,12 @@ def main():
     data_end    = _max_ts.date() if pd.notna(_max_ts) else today_date
     data_start  = _min_ts.date() if pd.notna(_min_ts) else today_date
 
+    _platforms_found = sorted(raw_df["PLATFORM"].unique().tolist())
+    _plat_str = " · ".join(_platforms_found)
     st.success(
         f"✅ Loaded **{len(raw_df):,}** messages · "
         f"**{raw_df['CONVERSATION_ID'].nunique():,}** conversations · "
-        f"**{raw_df['PLATFORM'].nunique()}** platforms · "
+        f"Platforms: **{_plat_str}** · "
         f"Data range: **{data_start}** → **{data_end}**"
     )
 
@@ -1277,7 +1323,35 @@ def main():
     render_metrics(conv_filtered, today_ts)
 
     st.markdown('<div class="section-title">📊 Analytics</div>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
+
+    # ── Platform summary cards ──────────────────────────────────────────────
+    platform_order = ["Shopee", "Lazada", "TikTok"]
+    all_platforms  = [p for p in platform_order if p in conv_filtered["PLATFORM"].values]
+    other_platforms = [p for p in conv_filtered["PLATFORM"].unique() if p not in platform_order]
+    all_platforms  += other_platforms
+
+    if len(all_platforms) > 1:
+        pcols = st.columns(len(all_platforms))
+        plat_colors = {"Shopee": "#EE4D2D", "Lazada": "#0F146D", "TikTok": "#010101"}
+        for i, plat in enumerate(all_platforms):
+            plat_df   = conv_filtered[conv_filtered["PLATFORM"] == plat]
+            plat_crr  = round(plat_df["IS_RESOLVED"].sum() / len(plat_df) * 100, 1) if len(plat_df) else 0
+            plat_csat = plat_df["CSAT_PROXY"].mean()
+            bg_color  = plat_colors.get(plat, "#1B2A4A")
+            with pcols[i]:
+                st.markdown(f"""
+                <div style="background:{bg_color};border-radius:10px;padding:12px 14px;color:white;margin-bottom:8px;">
+                  <div style="font-size:13px;font-weight:700;letter-spacing:0.5px;opacity:0.85;">{plat.upper()}</div>
+                  <div style="font-size:22px;font-weight:800;margin:4px 0;">{len(plat_df):,}</div>
+                  <div style="font-size:11px;opacity:0.75;">conversations</div>
+                  <div style="display:flex;gap:12px;margin-top:8px;font-size:12px;">
+                    <span>CRR {plat_crr}%</span>
+                    <span>CSAT {plat_csat:.1f if not pd.isna(plat_csat) else "—"}</span>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    c1, c2, c3, c4 = st.columns(4)
 
     with c1:
         issue_counts = conv_filtered["ISSUE_TYPE"].value_counts().reset_index()
@@ -1301,6 +1375,26 @@ def main():
         )
         st.markdown("**Daily Conversation Volume**")
         st.line_chart(daily.set_index("DATE")["Conversations"], color="#FF6B35")
+
+    with c4:
+        # Platform volume breakdown over time
+        if len(all_platforms) > 1:
+            plat_daily = (
+                conv_filtered
+                .assign(DATE=conv_filtered["LAST_MSG_TIME"].dt.normalize())
+                .groupby(["DATE", "PLATFORM"])
+                .size()
+                .reset_index(name="Count")
+                .pivot(index="DATE", columns="PLATFORM", values="Count")
+                .fillna(0)
+            )
+            st.markdown("**Volume by Platform**")
+            st.line_chart(plat_daily)
+        else:
+            plat_counts = conv_filtered["PLATFORM"].value_counts().reset_index()
+            plat_counts.columns = ["Platform", "Count"]
+            st.markdown("**Platform Breakdown**")
+            st.bar_chart(plat_counts.set_index("Platform")["Count"], color="#1B2A4A")
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🔥 Today's Priority Chats",
@@ -1409,11 +1503,15 @@ def main():
                 disp_wow["Avg_CRT_mins"] = disp_wow["Avg_CRT_mins"].apply(
                     lambda x: fmt_mins(x) if pd.notna(x) else "—")
                 st.dataframe(
-                    disp_wow[["WEEK","Conversations","CRR_%","Avg_CSAT","Avg_CRT_mins",
-                               "Conversions","Δ Conversations","Δ CRR_%","Δ Avg_CSAT"]].reset_index(drop=True),
+                    disp_wow[[c for c in ["WEEK","Conversations","Shopee","Lazada","TikTok",
+                               "CRR_%","Avg_CSAT","Avg_CRT_mins","Conversions",
+                               "Δ Conversations","Δ CRR_%","Δ Avg_CSAT"] if c in disp_wow.columns]].reset_index(drop=True),
                     use_container_width=True,
                     column_config={
                         "WEEK":            st.column_config.TextColumn("Week Starting"),
+                        "Shopee":          st.column_config.NumberColumn("Shopee", format="%d"),
+                        "Lazada":          st.column_config.NumberColumn("Lazada", format="%d"),
+                        "TikTok":          st.column_config.NumberColumn("TikTok", format="%d"),
                         "CRR_%":           st.column_config.NumberColumn("CRR %", format="%.1f%%"),
                         "Avg_CSAT":        st.column_config.NumberColumn("CSAT", format="%.2f"),
                         "Conversions":     st.column_config.NumberColumn("Conversions"),
@@ -1434,11 +1532,15 @@ def main():
                 disp_mom["Avg_CRT_mins"] = disp_mom["Avg_CRT_mins"].apply(
                     lambda x: fmt_mins(x) if pd.notna(x) else "—")
                 st.dataframe(
-                    disp_mom[["MONTH","Conversations","CRR_%","Avg_CSAT","Avg_CRT_mins",
-                               "Conversions","Δ Conversations","Δ CRR_%","Δ Avg_CSAT"]].reset_index(drop=True),
+                    disp_mom[[c for c in ["MONTH","Conversations","Shopee","Lazada","TikTok",
+                               "CRR_%","Avg_CSAT","Avg_CRT_mins","Conversions",
+                               "Δ Conversations","Δ CRR_%","Δ Avg_CSAT"] if c in disp_mom.columns]].reset_index(drop=True),
                     use_container_width=True,
                     column_config={
                         "MONTH":           st.column_config.TextColumn("Month"),
+                        "Shopee":          st.column_config.NumberColumn("Shopee", format="%d"),
+                        "Lazada":          st.column_config.NumberColumn("Lazada", format="%d"),
+                        "TikTok":          st.column_config.NumberColumn("TikTok", format="%d"),
                         "CRR_%":           st.column_config.NumberColumn("CRR %", format="%.1f%%"),
                         "Avg_CSAT":        st.column_config.NumberColumn("CSAT", format="%.2f"),
                         "Conversions":     st.column_config.NumberColumn("Conversions"),
@@ -1615,8 +1717,14 @@ def main():
 
     # ── Issue Breakdown Table ─────────────────────────────────────────────────
     st.markdown('<div class="section-title">📂 Issue Type Breakdown</div>', unsafe_allow_html=True)
+
+    # Platform-wise issue toggle
+    _plat_opts = ["All Platforms"] + sorted(conv_filtered["PLATFORM"].dropna().unique().tolist())
+    _sel_plat_ib = st.selectbox("Filter by Platform", _plat_opts, key="ib_platform")
+    _ib_df = conv_filtered if _sel_plat_ib == "All Platforms" else conv_filtered[conv_filtered["PLATFORM"] == _sel_plat_ib]
+
     ib = (
-        conv_filtered
+        _ib_df
         .groupby(["ISSUE_TYPE", "PRIORITY"])
         .agg(
             Count=("CONVERSATION_ID", "count"),
@@ -1630,7 +1738,14 @@ def main():
     ib["Avg_CSAT"]     = ib["Avg_CSAT"].round(1)
     ib["Avg_CRT_mins"] = ib["Avg_CRT_mins"].round(0).fillna(0).astype(int)
     ib["Unresolved"]   = ib["Unresolved"].astype(int)
-    st.dataframe(ib, use_container_width=True, height=300)
+    st.dataframe(ib, use_container_width=True, height=300,
+        column_config={
+            "Count":         st.column_config.NumberColumn("Count"),
+            "Unresolved":    st.column_config.NumberColumn("Unresolved"),
+            "Avg_CSAT":      st.column_config.NumberColumn("CSAT", format="%.1f"),
+            "Avg_CRT_mins":  st.column_config.NumberColumn("CRT (min)"),
+        }
+    )
 
     # ── Store Performance ─────────────────────────────────────────────────────
     st.markdown('<div class="section-title">🏪 Store Performance</div>', unsafe_allow_html=True)
@@ -1660,7 +1775,7 @@ def main():
         height=350,
         column_config={
             "STORE_CODE":   st.column_config.TextColumn("Store Code"),
-            "PLATFORM":     st.column_config.TextColumn("Platform"),
+            "PLATFORM":     st.column_config.TextColumn("Platform"),  # Shopee / Lazada / TikTok
             "COUNTRY_CODE": st.column_config.TextColumn("Country"),
             "Conversations":st.column_config.NumberColumn("Conversations"),
             "Unresolved":   st.column_config.NumberColumn("Unresolved"),
