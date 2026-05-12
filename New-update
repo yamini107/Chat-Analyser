@@ -1,6 +1,6 @@
 """
-Chat Analyzer Dashboard — Shopee & Lazada
-==========================================
+Chat Analyzer Dashboard — Shopee, Lazada & TikTok
+==================================================
 Graas.ai-themed Streamlit app for daily chat enquiry analysis.
 
 Run:  streamlit run chat_analyzer_dashboard.py
@@ -141,6 +141,9 @@ section[data-testid="stSidebar"] strong { color: #00C4B4 !important; }
 }
 .reply-label { font-size:0.75rem; color:#00C4B4; font-weight:700; text-transform:uppercase; margin-bottom:4px; }
 
+/* ── TikTok platform card ── */
+.tiktok-card { border-left-color: #010101 !important; }
+
 /* ── Upload area ── */
 .upload-area {
     background: #fff;
@@ -168,68 +171,145 @@ section[data-testid="stSidebar"] strong { color: #00C4B4 !important; }
 # CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── Issue keyword definitions ─────────────────────────────────────────────────
+# Each entry is (keyword, weight).  Longer / more specific phrases get higher
+# weight so they beat accidental partial matches from short words.
+# Matching uses whole-word boundaries for single-word tokens and substring for
+# multi-word phrases, after normalising whitespace and stripping special chars.
+
 ISSUE_KEYWORDS = {
     "Refund": [
-        "refund", "คืนเงิน", "pengembalian dana", "dana kembali", "ibalik", "irefund",
-        "bayar balik", "money back", "reimburse", "reimbursement",
-    ],
-    "Return": [
-        "return", "คืนสินค้า", "retur", "rma", "send back", "ส่งคืน", "kembalikan",
-        "return item", "product return",
-    ],
-    "Cancellation": [
-        "cancel", "cancelled", "ยกเลิก", "batalkan", "batal", "cancellation",
-        "cancel order", "ยกเลิกคำสั่งซื้อ",
-    ],
-    "Delay": [
-        "delay", "late", "slow", "ช้า", "lambat", "belum sampai", "haven't received",
-        "not arrived", "waiting", "รอนาน", "still waiting", "lama", "terlambat",
-        "overdue", "not delivered yet", "ยังไม่ได้รับ", "belum diterima",
-    ],
-    "Damaged/Wrong Item": [
-        "wrong item", "wrong product", "damaged", "broken", "defective",
-        "สินค้าผิด", "ของเสีย", "ของแตก", "ของชำรุด", "rusak", "cacat",
-        "salah barang", "salah produk", "not as described", "different item",
-        "wrong size", "wrong colour", "wrong color", "different from picture",
-    ],
-    "Missing Item": [
-        "missing", "not received", "didn't receive", "never received",
-        "ไม่ได้รับ", "ของหาย", "hilang", "tidak diterima", "tidak ada", "kurang",
-        "incomplete", "item missing", "package empty",
-    ],
-    "Payment Issue": [
-        "payment", "ชำระเงิน", "bayar", "pembayaran", "charge", "double charge",
-        "overcharged", "wrong charge", "billing", "invoice", "โอนเงิน", "จ่ายเงิน",
-        "pay", "transfer", "deducted", "not paid",
-    ],
-    "Product Inquiry": [
-        "how to", "how do", "วิธีใช้", "ราคา", "price", "size", "ขนาด",
-        "สี", "colour", "color", "spec", "specification", "ingredient",
-        "cara pakai", "ukuran", "warna", "harga", "stok", "stock", "available",
-        "variant", "model", "version",
-    ],
-    "Promotion Issue": [
-        "voucher", "promo", "discount", "coupon", "code", "sale", "offer",
-        "โปรโมชั่น", "ส่วนลด", "โค้ด", "diskon", "kode promo", "cashback",
-        "flash sale", "deal", "bundle",
-    ],
-    "Technical Issue": [
-        "error", "bug", "cannot", "can't", "unable", "failed", "not working",
-        "app issue", "website", "login", "checkout problem", "system",
-        "ไม่สามารถ", "เกิดข้อผิดพลาด", "tidak bisa", "gagal", "eror",
+        ("refund", 3), ("money back", 3), ("reimburse", 3), ("reimbursement", 3),
+        ("get my money", 3), ("return money", 3), ("want my money back", 4),
+        ("คืนเงิน", 3), ("pengembalian dana", 3), ("dana kembali", 3),
+        ("bayar balik", 3), ("ibalik ang pera", 3), ("irefund", 3),
+        ("คืนค่า", 3),
     ],
     "Complaint": [
-        "complain", "complaint", "terrible", "horrible", "awful", "worst",
-        "ร้องเรียน", "ไม่พอใจ", "รำคาญ", "โกรธ", "disappointed",
-        "frustrated", "unacceptable", "poor service", "bad service",
-        "kecewa", "mengecewakan", "tidak puas", "buruk", "parah",
+        ("complaint", 3), ("complain", 3), ("terrible", 2), ("horrible", 2),
+        ("awful", 2), ("worst", 2), ("disappointed", 2), ("frustrated", 2),
+        ("unacceptable", 3), ("poor service", 3), ("bad service", 3),
+        ("very bad", 2), ("so bad", 2), ("not happy", 2),
+        ("ร้องเรียน", 3), ("ไม่พอใจ", 2), ("รำคาญ", 2), ("โกรธ", 2),
+        ("kecewa", 2), ("mengecewakan", 2), ("tidak puas", 3),
+        ("buruk", 2), ("parah", 2), ("sangat buruk", 3),
+    ],
+    "Damaged/Wrong Item": [
+        ("wrong item", 4), ("wrong product", 4), ("different item", 4),
+        ("not as described", 4), ("different from picture", 4),
+        ("damaged", 3), ("broken", 3), ("defective", 3), ("dented", 3),
+        ("cracked", 3), ("torn", 2), ("spoiled", 2), ("expired", 3),
+        ("wrong size", 3), ("wrong colour", 3), ("wrong color", 3),
+        ("wrong variant", 3), ("incorrect item", 4),
+        ("สินค้าผิด", 3), ("ของเสีย", 3), ("ของแตก", 3), ("ของชำรุด", 3),
+        ("ผิดสี", 3), ("ผิดไซส์", 3),
+        ("rusak", 3), ("cacat", 3), ("salah barang", 4), ("salah produk", 4),
+        ("barang salah", 4), ("produk salah", 4), ("tidak sesuai", 3),
+        ("mali ang item", 4), ("sira", 2), ("basag", 2),
+    ],
+    "Missing Item": [
+        ("missing item", 4), ("item missing", 4), ("package empty", 4),
+        ("not received", 3), ("never received", 3), ("didn't receive", 3),
+        ("did not receive", 3), ("haven't received", 3), ("has not arrived", 3),
+        ("not delivered", 3), ("no package", 3), ("incomplete order", 3),
+        ("missing", 2),
+        ("ไม่ได้รับ", 3), ("ของหาย", 3), ("ไม่มีของ", 3),
+        ("hilang", 2), ("tidak diterima", 3), ("tidak ada barang", 4),
+        ("kurang barang", 3), ("barang tidak ada", 4),
+        ("hindi natanggap", 3), ("wala ang item", 4), ("kulang", 2),
+    ],
+    "Return": [
+        ("return item", 4), ("return product", 4), ("product return", 4),
+        ("send back", 3), ("want to return", 4), ("how to return", 4),
+        ("return request", 4), ("rma", 3), ("return policy", 3),
+        ("return", 2),
+        ("คืนสินค้า", 3), ("ส่งคืน", 3), ("ขอคืน", 3),
+        ("retur barang", 3), ("kembalikan barang", 3), ("mau return", 3),
+        ("ibalik ang item", 4), ("ibalik ang produkto", 4),
+    ],
+    "Cancellation": [
+        ("cancel order", 4), ("cancel my order", 4), ("cancellation", 3),
+        ("order cancellation", 4), ("want to cancel", 4),
+        ("please cancel", 4), ("cancelled", 2), ("cancel", 2),
+        ("ยกเลิกคำสั่งซื้อ", 4), ("ยกเลิก", 2),
+        ("batalkan pesanan", 4), ("batal pesanan", 4),
+        ("batalkan", 2), ("batal", 2),
+        ("kanselahin", 3), ("icancelled", 3),
+    ],
+    "Delay": [
+        ("not yet arrived", 4), ("not yet received", 4), ("still waiting", 3),
+        ("where is my order", 4), ("where is my parcel", 4),
+        ("order not arrived", 4), ("parcel not arrived", 4),
+        ("long time", 2), ("too long", 2), ("overdue", 3),
+        ("not delivered yet", 4), ("delayed", 3), ("delay", 2),
+        ("late delivery", 3), ("late", 2), ("slow delivery", 3),
+        ("ยังไม่ได้รับ", 3), ("รอนาน", 3), ("ช้า", 2), ("ช้ามาก", 3),
+        ("belum sampai", 3), ("belum diterima", 3), ("lambat", 2),
+        ("terlambat", 3), ("masih menunggu", 3), ("lama sekali", 3),
+        ("hindi pa dumating", 3), ("matagal na", 3),
+    ],
+    "Payment Issue": [
+        ("double charge", 4), ("overcharged", 4), ("wrong charge", 4),
+        ("charged twice", 4), ("payment failed", 4), ("payment error", 4),
+        ("not paid", 3), ("payment not processed", 4), ("billing issue", 3),
+        ("deducted twice", 4), ("wrong amount", 3), ("extra charge", 3),
+        ("payment", 2), ("billing", 2), ("invoice", 2),
+        ("ชำระเงินไม่ได้", 4), ("โอนผิด", 4), ("ถูกหักเงิน", 3),
+        ("pembayaran gagal", 4), ("bayar dua kali", 4), ("kena charge", 3),
+        ("bayar", 2),
+        ("bayad na dalawang beses", 4), ("hindi natanggap ang bayad", 4),
+    ],
+    "Promotion Issue": [
+        ("voucher not working", 4), ("code not working", 4),
+        ("discount not applied", 4), ("promo not working", 4),
+        ("voucher invalid", 4), ("coupon invalid", 4),
+        ("cashback not received", 4), ("flash sale", 3),
+        ("promo code", 3), ("discount code", 3),
+        ("voucher", 2), ("promo", 2), ("discount", 2),
+        ("coupon", 2), ("cashback", 2), ("bundle deal", 3),
+        ("โปรโมชั่น", 2), ("ส่วนลด", 2), ("โค้ดไม่ได้", 4), ("โค้ด", 2),
+        ("kode promo tidak berlaku", 4), ("voucher tidak bisa", 4),
+        ("diskon tidak masuk", 4), ("diskon", 2), ("kode promo", 3),
+    ],
+    "Technical Issue": [
+        ("cannot checkout", 4), ("checkout failed", 4), ("app not working", 4),
+        ("website not working", 4), ("cannot login", 4), ("login failed", 4),
+        ("cannot place order", 4), ("order failed", 4), ("system error", 3),
+        ("page not loading", 3), ("app crash", 3), ("button not working", 3),
+        ("cannot", 2), ("can't", 2), ("unable to", 3), ("not working", 3),
+        ("error", 2), ("failed", 2), ("bug", 2),
+        ("ไม่สามารถ", 2), ("เกิดข้อผิดพลาด", 3), ("แอปค้าง", 3),
+        ("tidak bisa checkout", 4), ("tidak bisa login", 4),
+        ("gagal checkout", 4), ("tidak bisa", 3), ("gagal", 2), ("eror", 2),
+        ("hindi makapag-checkout", 4), ("hindi gumagana", 3),
+    ],
+    "Product Inquiry": [
+        ("what is the price", 3), ("how much", 3), ("is it available", 3),
+        ("do you have", 3), ("what size", 3), ("what colour", 3),
+        ("how to use", 3), ("what is", 2), ("is this", 2),
+        ("ingredients", 3), ("specifications", 3), ("compatible with", 3),
+        ("available", 2), ("stock", 2), ("variant", 2),
+        ("price", 2), ("size", 2), ("colour", 2), ("color", 2),
+        ("spec", 2), ("model", 2), ("version", 2),
+        ("ราคา", 2), ("มีไหม", 3), ("วิธีใช้", 3), ("ขนาด", 2), ("สี", 2),
+        ("harga", 2), ("stok", 2), ("ukuran", 2), ("warna", 2),
+        ("cara pakai", 3), ("ada stok", 3),
+        ("magkano", 2), ("mayroon ba", 3), ("paano gamitin", 3),
     ],
 }
+
+# ── Hierarchy: when two issues tie, higher index wins ─────────────────────────
+# Order: most impactful / urgent first
+ISSUE_PRIORITY_ORDER = [
+    "Refund", "Complaint", "Damaged/Wrong Item", "Missing Item",
+    "Return", "Cancellation", "Delay", "Payment Issue",
+    "Promotion Issue", "Technical Issue", "Product Inquiry",
+]
 
 PRIORITY_MAP = {
     "High":   ["Refund", "Complaint", "Damaged/Wrong Item"],
     "Medium": ["Delay", "Missing Item", "Return", "Cancellation"],
-    "Low":    ["Product Inquiry", "Promotion Issue", "Payment Issue", "Technical Issue"],
+    "Low":    ["Product Inquiry", "Promotion Issue", "Payment Issue", "Technical Issue", "Others"],
 }
 
 # ── Team Member → Store Code mapping (effective 30 March 2026) ────────────────
@@ -250,6 +330,13 @@ STORE_TO_AGENT = {
     store.upper(): agent
     for agent, stores in TEAM_ASSIGNMENTS.items()
     for store in stores
+}
+
+# GED is a shared store code — assign by COUNTRY_CODE
+GED_COUNTRY_TO_AGENT = {
+    "MY": "Yeria",
+    "SG": "Syahira",
+    "PH": "Keerthana",
 }
 
 AGENT_SHIFT = {
@@ -408,7 +495,7 @@ SUGGESTED_REPLIES = {
         "We take every concern seriously and are committed to making this right for you. 😊\n\n"
         "Your feedback helps us improve — how would you rate your support experience today?"
     ),
-    "Other": (
+    "Others": (
         "Thank you for reaching out to us! We've reviewed your message and our team is addressing your concern. "
         "We aim to provide a resolution within 24 hours and will keep you updated throughout. "
         "We appreciate your patience and your trust in us. 😊\n\n"
@@ -512,7 +599,7 @@ ACTION_STEPS = {
         "5. Escalate to senior manager if buyer threatens churn/review.\n"
         "6. Follow up within 4 hours with resolution update."
     ),
-    "Other": (
+    "Others": (
         "1. Understand buyer's concern fully before responding.\n"
         "2. Route to appropriate team if issue is specialised.\n"
         "3. Aim to resolve within 24 hours.\n"
@@ -525,11 +612,15 @@ ACTION_STEPS = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 def detect_sentiment(text: str) -> str:
+    """Detect sentiment using normalised text and word-boundary matching."""
     if not isinstance(text, str) or not text.strip():
         return "Neutral"
-    t = text.lower()
-    neg = sum(1 for kw in NEGATIVE_KWS if kw in t)
-    pos = sum(1 for kw in POSITIVE_KWS if kw in t)
+    # Use same normalisation as issue detection for consistency
+    import unicodedata
+    t = unicodedata.normalize("NFKC", text).lower()
+    t = re.sub(r"\s+", " ", t).strip()
+    neg = sum(1 for kw in NEGATIVE_KWS if kw.lower() in t)
+    pos = sum(1 for kw in POSITIVE_KWS if kw.lower() in t)
     if neg > pos:
         return "Negative"
     if pos > neg:
@@ -537,18 +628,93 @@ def detect_sentiment(text: str) -> str:
     return "Neutral"
 
 
+def _normalise_text(text: str) -> str:
+    """Normalise text for keyword matching:
+    - lowercase
+    - collapse multiple spaces / newlines / tabs to single space
+    - strip leading/trailing whitespace
+    - remove common special chars that split words (keep alphanumeric + spaces + unicode)
+    """
+    import unicodedata
+    if not isinstance(text, str):
+        return ""
+    # Unicode normalise
+    text = unicodedata.normalize("NFKC", text)
+    # Lowercase
+    text = text.lower()
+    # Replace punctuation that breaks word matching with space
+    text = re.sub(r"[!@#$%^&*()\[\]{}|<>/]", " ", text)
+    # Collapse whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _keyword_matches(normalised_text: str, keyword: str) -> bool:
+    """Check if a keyword matches in normalised text with correct boundary logic:
+    - Multi-word phrases: substring match (specificity is inherent)
+    - Non-ASCII keywords (Thai, Bahasa, Filipino): substring match
+      (these languages may not have spaces between words)
+    - Short ASCII single words (≤8 chars): word-boundary match
+      Prevents 'pay' matching 'display', 'color' matching 'colorful'
+    - Longer ASCII single words (>8 chars): substring match
+      (specific enough to avoid false positives)
+    """
+    kw = keyword.lower().strip()
+    if not kw:
+        return False
+    # Multi-word phrase: substring match
+    if " " in kw:
+        return kw in normalised_text
+    # Non-ASCII (Thai, Bahasa, etc.): substring match
+    if not kw.isascii():
+        return kw in normalised_text
+    # Short ASCII word: word boundary
+    if len(kw) <= 8:
+        return bool(re.search(r"\b" + re.escape(kw) + r"\b", normalised_text))
+    # Longer ASCII word: substring
+    return kw in normalised_text
+
+
 def detect_issue_type(text: str) -> str:
+    """Classify issue type from buyer message text.
+
+    Uses weighted keyword scoring with normalisation.
+    Ties are broken by ISSUE_PRIORITY_ORDER (higher urgency wins).
+    Falls back to 'Others' when no keywords match.
+    """
     if not isinstance(text, str) or not text.strip():
-        return "Other"
-    t = text.lower()
-    scores = {}
-    for issue, kws in ISSUE_KEYWORDS.items():
-        score = sum(1 for kw in kws if kw.lower() in t)
-        if score > 0:
-            scores[issue] = score
+        return "Others"
+
+    normalised = _normalise_text(text)
+    if not normalised:
+        return "Others"
+
+    scores: dict[str, float] = {}
+    for issue, kw_list in ISSUE_KEYWORDS.items():
+        total = 0.0
+        for kw, weight in kw_list:
+            if _keyword_matches(normalised, kw):
+                total += weight
+        if total > 0:
+            scores[issue] = total
+
     if not scores:
-        return "Other"
-    return max(scores, key=scores.get)
+        return "Others"
+
+    # Find max score
+    max_score = max(scores.values())
+    # All issues tied at max score
+    candidates = [iss for iss, sc in scores.items() if sc == max_score]
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # Break tie using ISSUE_PRIORITY_ORDER (lower index = higher priority)
+    for issue in ISSUE_PRIORITY_ORDER:
+        if issue in candidates:
+            return issue
+
+    return candidates[0]
 
 
 def get_priority(issue_type: str) -> str:
@@ -592,10 +758,45 @@ def compute_csat(sentiment: str, is_resolved: bool) -> float:
 
 
 def generate_summary(buyer_msgs: list, issue_type: str) -> str:
+    """Generate a clean natural-language buyer summary.
+
+    - Strips auto-reply noise
+    - Deduplicates repeated messages
+    - Produces a readable first-sentence summary + detected issue label
+    - Falls back gracefully when messages are empty or all auto-replies
+    """
     if not buyer_msgs:
         return "No buyer messages."
-    combined = " ".join([m for m in buyer_msgs if isinstance(m, str)])[:400]
-    return f"[{issue_type}] Buyer enquiry: {combined[:200]}{'...' if len(combined) > 200 else ''}"
+
+    # Normalise and deduplicate
+    seen = set()
+    clean_msgs = []
+    for m in buyer_msgs:
+        if not isinstance(m, str):
+            continue
+        m_stripped = re.sub(r"\s+", " ", m.strip())
+        if not m_stripped or is_auto_reply(m_stripped):
+            continue
+        m_lower = m_stripped.lower()
+        if m_lower not in seen:
+            seen.add(m_lower)
+            clean_msgs.append(m_stripped)
+
+    if not clean_msgs:
+        return f"[{issue_type}] No substantive buyer message detected."
+
+    # Build combined text from up to 3 most informative messages
+    combined_parts = clean_msgs[:3]
+    combined = " | ".join(combined_parts)
+
+    # Truncate to 250 chars cleanly (don't cut mid-word)
+    if len(combined) > 250:
+        combined = combined[:250].rsplit(" ", 1)[0] + "…"
+
+    # Issue label validation
+    safe_issue = issue_type if issue_type and issue_type.strip() else "Others"
+
+    return f"[{safe_issue}] {combined}"
 
 
 def fmt_mins(mins) -> str:
@@ -608,10 +809,14 @@ def fmt_mins(mins) -> str:
     return f"{h}h {m}m" if m else f"{h}h"
 
 
-def get_team_member(store_code: str) -> str:
+def get_team_member(store_code: str, country_code: str = "") -> str:
     code = str(store_code).strip().upper()
     if not code:
         return "Others"
+    # GED is a shared store code — route by country
+    if code == "GED":
+        country = str(country_code).strip().upper()
+        return GED_COUNTRY_TO_AGENT.get(country, "Others")
     return STORE_TO_AGENT.get(code, "Others")
 
 
@@ -621,7 +826,7 @@ def detect_conversion(buyer_msgs: list) -> bool:
 
 
 def get_action_steps(issue_type: str) -> str:
-    return ACTION_STEPS.get(issue_type, ACTION_STEPS["Other"])
+    return ACTION_STEPS.get(issue_type, ACTION_STEPS["Others"])
 
 
 def filter_stores_by_search(all_stores: list, search_term: str) -> list:
@@ -656,6 +861,9 @@ def compute_wow_mom(conv_df: pd.DataFrame) -> tuple:
                 Negative=("SENTIMENT", lambda x: (x == "Negative").sum()),
                 Positive=("SENTIMENT", lambda x: (x == "Positive").sum()),
                 Conversions=("IS_CONVERSION", "sum"),
+                TikTok=("PLATFORM", lambda x: (x == "TikTok").sum()),
+                Shopee=("PLATFORM", lambda x: (x == "Shopee").sum()),
+                Lazada=("PLATFORM", lambda x: (x == "Lazada").sum()),
             )
             .reset_index()
             .sort_values(period_col)
@@ -705,27 +913,280 @@ def compute_team_performance(conv_df: pd.DataFrame) -> pd.DataFrame:
 # DATA LOADING
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _repair_streaming_xlsx(file_bytes: bytes) -> bytes:
+    """
+    Repair a streaming XLSX (Google Sheets / some exporters) that is missing
+    the End-of-Central-Directory record AND required OOXML metadata files
+    ([Content_Types].xml, xl/workbook.xml, _rels/.rels, xl/_rels/workbook.xml.rels).
+    Scans local-file headers, decompresses each entry, injects any missing
+    metadata stubs, and writes a proper ZIP so openpyxl / pandas can read it.
+    Returns original bytes unchanged if already a valid ZIP.
+    """
+    import zipfile as _zf, struct as _st, zlib as _zl, re as _re
+
+    # Quick check — if already valid, return as-is
+    try:
+        with _zf.ZipFile(io.BytesIO(file_bytes)):
+            pass
+        return file_bytes
+    except _zf.BadZipFile:
+        pass
+
+    data = bytearray(file_bytes)
+    extracted = {}   # fname → content (bytes)
+
+    pos = 0
+    while pos < len(data) - 30:
+        idx = data.find(b"PK\x03\x04", pos)
+        if idx == -1:
+            break
+        try:
+            (_, _, flag, method, _, _, _,
+             comp_size, uncomp_size,
+             fname_len, extra_len) = _st.unpack_from("<4sHHHHHIIIHH", data, idx)
+            fname = data[idx+30: idx+30+fname_len].decode("utf-8", errors="replace")
+            data_start = idx + 30 + fname_len + extra_len
+            raw = bytes(data[data_start:])
+
+            if method == 8:       # DEFLATE (streaming — comp_size may be 0)
+                d = _zl.decompressobj(-15)
+                content = b""
+                i = 0
+                while i < len(raw):
+                    try:
+                        content += d.decompress(raw[i:i+65536])
+                        i += 65536
+                    except _zl.error:
+                        break
+            elif method == 0:     # STORED
+                content = raw[:uncomp_size] if uncomp_size > 0 else b""
+            else:
+                pos = idx + 4
+                continue
+
+            if fname and content:
+                # Fix truncated sharedStrings.xml — patch to last complete </si>
+                if fname == "xl/sharedStrings.xml" and b"</sst>" not in content:
+                    last_si = content.rfind(b"</si>")
+                    if last_si != -1:
+                        content = content[:last_si + 5] + b"\n</sst>"
+                extracted[fname] = content
+        except Exception:
+            pass
+        pos = idx + 4
+
+    if not extracted:
+        return file_bytes   # Nothing extracted — let caller handle error
+
+    # ── Determine how many sheets exist ───────────────────────────────────────
+    sheet_keys = sorted(
+        [k for k in extracted if k.startswith("xl/worksheets/sheet") and k.endswith(".xml")],
+        key=lambda x: int(_re.search(r"sheet(\d+)", x).group(1)) if _re.search(r"sheet(\d+)", x) else 0
+    )
+    n_sheets = len(sheet_keys)
+
+    # ── Inject [Content_Types].xml if missing ─────────────────────────────────
+    if "[Content_Types].xml" not in extracted:
+        sheet_overrides = "\n".join(
+            f'  <Override PartName="/xl/worksheets/sheet{i+1}.xml" '
+            f'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            for i in range(n_sheets)
+        )
+        extracted["[Content_Types].xml"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n'
+            '  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n'
+            '  <Default Extension="xml" ContentType="application/xml"/>\n'
+            '  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>\n'
+            '  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>\n'
+            '  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>\n'
+            + sheet_overrides + "\n"
+            "</Types>"
+        ).encode("utf-8")
+
+    # ── Inject _rels/.rels if missing ─────────────────────────────────────────
+    if "_rels/.rels" not in extracted:
+        extracted["_rels/.rels"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+            '  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>\n'
+            "</Relationships>"
+        ).encode("utf-8")
+
+    # ── Inject xl/workbook.xml if missing ─────────────────────────────────────
+    if "xl/workbook.xml" not in extracted:
+        sheet_elems = "\n".join(
+            f'    <sheet name="Sheet{i+1}" sheetId="{i+1}" r:id="rId{i+1}"/>'
+            for i in range(n_sheets)
+        )
+        extracted["xl/workbook.xml"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"\n'
+            '  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">\n'
+            '  <sheets>\n'
+            + sheet_elems + "\n"
+            "  </sheets>\n"
+            "</workbook>"
+        ).encode("utf-8")
+
+    # ── Inject xl/_rels/workbook.xml.rels if missing ──────────────────────────
+    if "xl/_rels/workbook.xml.rels" not in extracted:
+        rels = []
+        for i in range(n_sheets):
+            rels.append(
+                f'  <Relationship Id="rId{i+1}" '
+                f'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+                f'Target="worksheets/sheet{i+1}.xml"/>'
+            )
+        if "xl/sharedStrings.xml" in extracted:
+            rels.append(
+                f'  <Relationship Id="rId{n_sheets+1}" '
+                f'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" '
+                f'Target="sharedStrings.xml"/>'
+            )
+        extracted["xl/_rels/workbook.xml.rels"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+            + "\n".join(rels) + "\n"
+            "</Relationships>"
+        ).encode("utf-8")
+
+    # ── Inject minimal xl/styles.xml if missing ───────────────────────────────
+    if "xl/styles.xml" not in extracted:
+        extracted["xl/styles.xml"] = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">\n'
+            '  <fonts><font><sz val="11"/><name val="Calibri"/></font></fonts>\n'
+            '  <fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>\n'
+            '  <borders><border><left/><right/><top/><bottom/><diagonal/></border></borders>\n'
+            '  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>\n'
+            '  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>\n'
+            "</styleSheet>"
+        ).encode("utf-8")
+
+    # ── Write repaired ZIP ────────────────────────────────────────────────────
+    new_zip = io.BytesIO()
+    with _zf.ZipFile(new_zip, "w", compression=_zf.ZIP_DEFLATED) as zout:
+        # [Content_Types].xml must be first
+        for priority in ["[Content_Types].xml", "_rels/.rels",
+                         "xl/workbook.xml", "xl/_rels/workbook.xml.rels",
+                         "xl/styles.xml", "xl/sharedStrings.xml"]:
+            if priority in extracted:
+                zout.writestr(priority, extracted[priority])
+        # Then all other files
+        for fname, content in extracted.items():
+            if fname not in ["[Content_Types].xml", "_rels/.rels",
+                              "xl/workbook.xml", "xl/_rels/workbook.xml.rels",
+                              "xl/styles.xml", "xl/sharedStrings.xml"]:
+                zout.writestr(fname, content)
+
+    new_zip.seek(0)
+    return new_zip.read()
+
+
 @st.cache_data(show_spinner=False)
-def load_data(file_bytes: bytes) -> pd.DataFrame:
+def load_data(file_bytes: bytes, _file_hash: str = "") -> pd.DataFrame:
+    # _file_hash is intentionally unused — it only busts the Streamlit cache when the file changes
+
+    # Repair streaming/truncated XLSX (Google Sheets exports missing EOCD record)
+    file_bytes = _repair_streaming_xlsx(file_bytes)
+
     xl = pd.ExcelFile(io.BytesIO(file_bytes))
     sheets_found = xl.sheet_names
 
     dfs = []
-    platform_map = {}
     for s in sheets_found:
         name_lower = s.lower()
         if "lazada" in name_lower:
-            platform_map[s] = "Lazada"
+            platform = "Lazada"
         elif "shopee" in name_lower:
-            platform_map[s] = "Shopee"
+            platform = "Shopee"
+        elif "tiktok" in name_lower or "tik_tok" in name_lower or "tik tok" in name_lower:
+            platform = "TikTok"
         else:
-            platform_map[s] = "Unknown"
+            platform = "Unknown"
+
         df = xl.parse(s, dtype=str)
-        df["PLATFORM"] = platform_map[s]
+
+        # ── Auto-detect platform from SITE_NICK_NAME_ID if sheet name gives no hint ──
+        # Handles sheets named generically like "Sheet1", "Apr", "May" etc.
+        if platform == "Unknown" and "SITE_NICK_NAME_ID" in df.columns:
+            sample_sites = df["SITE_NICK_NAME_ID"].dropna().astype(str).str.lower()
+            if sample_sites.str.contains("shopee").any():
+                platform = "Shopee"
+            elif sample_sites.str.contains("lazada").any():
+                platform = "Lazada"
+            elif sample_sites.str.contains("tiktok|tik_tok").any():
+                platform = "TikTok"
+
+        # Skip sheets that are clearly not chat data (no recognisable platform)
+        # but keep Unknown so we don't silently drop new platforms
+        df["PLATFORM"] = platform
+
+        # ── Normalise column name variants across different sheet formats ──
+        # Some sheets use MESSAGE / MSG_TIME_RAW_TS / MSG_TIME_RAW instead of
+        # MESSAGE_PARSED / MESSAGE_TIME — rename them to the standard names
+        if "MESSAGE_TIME" not in df.columns:
+            if "MSG_TIME_RAW_TS" in df.columns:
+                df = df.rename(columns={"MSG_TIME_RAW_TS": "MESSAGE_TIME"})
+            elif "MSG_TIME_RAW" in df.columns:
+                df = df.rename(columns={"MSG_TIME_RAW": "MESSAGE_TIME"})
+
+        if "MESSAGE_PARSED" not in df.columns:
+            if "MESSAGE" in df.columns:
+                df = df.rename(columns={"MESSAGE": "MESSAGE_PARSED"})
+            elif "CONTENT" in df.columns:
+                df = df.rename(columns={"CONTENT": "MESSAGE_PARSED"})
+            elif "MSG_CONTENT" in df.columns:
+                df = df.rename(columns={"MSG_CONTENT": "MESSAGE_PARSED"})
+
+        # TikTok may use CHAT_ID or SESSION_ID instead of CONVERSATION_ID
+        if "CONVERSATION_ID" not in df.columns:
+            if "CHAT_ID" in df.columns:
+                df = df.rename(columns={"CHAT_ID": "CONVERSATION_ID"})
+            elif "SESSION_ID" in df.columns:
+                df = df.rename(columns={"SESSION_ID": "CONVERSATION_ID"})
+
+        # TikTok may use SHOP_CODE or SELLER_ID instead of STORE_CODE
+        if "STORE_CODE" not in df.columns:
+            if "SHOP_CODE" in df.columns:
+                df = df.rename(columns={"SHOP_CODE": "STORE_CODE"})
+            elif "SELLER_ID" in df.columns:
+                df = df.rename(columns={"SELLER_ID": "STORE_CODE"})
+
+        # TikTok may use USER or CUSTOMER_NAME instead of BUYER_NAME
+        if "BUYER_NAME" not in df.columns:
+            if "USER" in df.columns:
+                df = df.rename(columns={"USER": "BUYER_NAME"})
+            elif "CUSTOMER_NAME" in df.columns:
+                df = df.rename(columns={"CUSTOMER_NAME": "BUYER_NAME"})
+
+        # TikTok may use ROLE or FROM instead of SENDER
+        if "SENDER" not in df.columns:
+            if "ROLE" in df.columns:
+                df = df.rename(columns={"ROLE": "SENDER"})
+            elif "FROM" in df.columns:
+                df = df.rename(columns={"FROM": "SENDER"})
+
+        # Skip sheets that still have no MESSAGE_TIME (unrelated/summary sheets)
+        if "MESSAGE_TIME" not in df.columns:
+            continue
+
         dfs.append(df)
 
+    if not dfs:
+        st.error("No valid chat sheets found in the uploaded file.")
+        return pd.DataFrame()
+
     combined = pd.concat(dfs, ignore_index=True)
+
+    # Drop duplicate rows (same conversation + message time + sender) across sheets
+    dedup_cols = [c for c in ["CONVERSATION_ID", "MESSAGE_TIME", "SENDER", "MESSAGE_PARSED"] if c in combined.columns]
+    combined = combined.drop_duplicates(subset=dedup_cols, keep="first")
+
     combined["MESSAGE_TIME"] = pd.to_datetime(combined["MESSAGE_TIME"], errors="coerce")
+    # Drop rows where MESSAGE_TIME could not be parsed
+    combined = combined[combined["MESSAGE_TIME"].notna()].copy()
 
     for col in ["STORE_CODE", "SITE_NICK_NAME_ID", "CHANNEL_NAME", "COUNTRY_CODE",
                 "CONVERSATION_ID", "BUYER_NAME", "MESSAGE_PARSED",
@@ -791,7 +1252,8 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
 
     rows = []
     for conv_id, grp in df_sorted.groupby("CONVERSATION_ID", sort=False):
-        issue_type = issue_map.get(conv_id, "Other")
+        _raw_issue = issue_map.get(conv_id, "Others")
+        issue_type = _raw_issue if (isinstance(_raw_issue, str) and _raw_issue.strip()) else "Others"
         sentiment  = sentiment_map.get(conv_id, "Neutral")
         b_msgs     = buyer_msgs_per_conv.get(conv_id, [])
         s_msgs     = seller_msgs_per_conv.get(conv_id, [])
@@ -845,7 +1307,7 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
             "AVG_CRT_MINS":      round(avg_crt, 1) if not np.isnan(avg_crt) else None,
             "BUYER_SUMMARY":     generate_summary(b_msgs, issue_type),
             "IS_CONVERSION":     detect_conversion(b_msgs),
-            "TEAM_MEMBER":       get_team_member(_get("STORE_CODE")),
+            "TEAM_MEMBER":       get_team_member(_get("STORE_CODE"), _get("COUNTRY_CODE")),
             "IS_ANSWERED":       str(_get("IS_ANSWERED")).lower() == "true",
             "IS_READ":           str(_get("IS_READ")).lower() == "true",
         })
@@ -873,7 +1335,7 @@ def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
     df = conv_df.copy()
     # Re-attach reply/action columns on the fly (never stored in memory)
     df["SUGGESTED_REPLY"] = df["ISSUE_TYPE"].astype(str).map(
-        lambda it: SUGGESTED_REPLIES.get(it, SUGGESTED_REPLIES["Other"])
+        lambda it: SUGGESTED_REPLIES.get(it, SUGGESTED_REPLIES["Others"])
     )
     df["ACTION_STEPS"] = df["ISSUE_TYPE"].astype(str).map(get_action_steps)
 
@@ -901,7 +1363,10 @@ def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
         crr        = round(resolved / total * 100, 1) if total else 0
         avg_crt    = df["AVG_CRT_MINS"].mean()
         avg_csat   = df["CSAT_PROXY"].mean()
-        today_df   = df[df["LAST_MSG_TIME"].dt.normalize() == pd.Timestamp(today_str)]
+        # Use latest date in the exported data, not system today
+        data_max_ts = df["LAST_MSG_TIME"].dropna().max()
+        data_max_date = data_max_ts.normalize() if pd.notna(data_max_ts) else pd.Timestamp(today_str)
+        today_df   = df[df["LAST_MSG_TIME"].dt.normalize() == data_max_date]
         hi_today   = len(today_df[today_df["PRIORITY"] == "High"])
 
         ws1.write(0, 0, f"Chat Analyzer Summary — {today_str}", wb.add_format(
@@ -918,7 +1383,10 @@ def build_excel(conv_df: pd.DataFrame, today_str: str) -> bytes:
             ["Avg Chat Response Time (CRT)", fmt_mins(avg_crt)],
             ["Avg CSAT Proxy Score (1–5)", round(avg_csat, 2) if not np.isnan(avg_csat) else "—"],
             ["Today's High Priority Chats", hi_today],
-            ["Platforms", ", ".join(df["PLATFORM"].astype(str).unique().tolist())],
+            ["Platforms", ", ".join(sorted(df["PLATFORM"].astype(str).unique().tolist()))],
+            ["Shopee Conversations", int((df["PLATFORM"] == "Shopee").sum())],
+            ["Lazada Conversations", int((df["PLATFORM"] == "Lazada").sum())],
+            ["TikTok Conversations", int((df["PLATFORM"] == "TikTok").sum())],
         ]
         for i, (label, val) in enumerate(summary_data, start=3):
             ws1.write(i, 0, label, sub_fmt)
@@ -988,7 +1456,7 @@ def render_header():
         <div class="graas-logo">📊</div>
         <div>
             <h1>Chat Analyzer Dashboard</h1>
-            <p>Graas.ai · Shopee & Lazada · Sentiment · CSAT · Unresolved Detection · Suggested Replies</p>
+            <p>Graas.ai · Shopee, Lazada & TikTok · Sentiment · CSAT · Unresolved Detection · Suggested Replies</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1007,7 +1475,7 @@ def render_metrics(conv_df: pd.DataFrame, today_ts: pd.Timestamp):
 
     cols = st.columns(8)
     metrics = [
-        (cols[0], "🗣️ Total Convs", f"{total:,}",   "7-day window", ""),
+        (cols[0], "🗣️ Total Convs", f"{total:,}",   "all platforms", ""),
         (cols[1], "📅 Today",       f"{len(today_conv):,}", "conversations", "navy"),
         (cols[2], "✅ Resolved",    f"{resolved:,}", f"CRR {crr}%", "green"),
         (cols[3], "🔴 Unresolved",  f"{unresolved:,}", "need action", "red"),
@@ -1046,8 +1514,8 @@ def apply_filters(conv_df: pd.DataFrame, today_ts: pd.Timestamp, data_end=None) 
     _ts_max = src["LAST_MSG_TIME"].dropna().max()
     min_date = _ts_min.date() if pd.notna(_ts_min) else datetime.today().date()
     max_date = _ts_max.date() if pd.notna(_ts_max) else datetime.today().date()
-    # Default: show ALL data in the file (min → max), not just last 7 days
-    # This ensures no data is silently excluded when user first loads the file
+    # Default: show ALL data in the file (data_start → data_end)
+    # max_value extends to today so users can see if new data arrives
     default_start = min_date
 
     date_range = st.sidebar.date_input(
@@ -1055,7 +1523,7 @@ def apply_filters(conv_df: pd.DataFrame, today_ts: pd.Timestamp, data_end=None) 
         value=(default_start, max_date),
         min_value=min_date,
         max_value=max_date,
-        help="Defaults to full data range. Narrow it to focus on a specific period.",
+        help="Defaults to full data range in the file. Narrow to focus on a specific period.",
     )
 
     # Priority / Sentiment / Resolution / Issue
@@ -1075,30 +1543,20 @@ def apply_filters(conv_df: pd.DataFrame, today_ts: pd.Timestamp, data_end=None) 
     else:
         sel_agents = []
 
-    # ── Store Code: text search → filtered multiselect ────────────────────────
-    all_stores = sorted(src["STORE_CODE"].dropna().unique().tolist())
-    store_search = st.sidebar.text_input(
-        "🔍 Search Store Code",
-        placeholder="Type GED, IGZ, EWG…",
-        help="Partial match — type any part of the store code (e.g. 'GED' shows GED MY, GED SG, GED PH).",
+    # ── Store Code: single dropdown with "All" option ────────────────────────
+    all_stores = sorted(
+        [s for s in src["STORE_CODE"].dropna().unique().tolist() if str(s).strip()],
+        key=lambda x: str(x).upper()
     )
-    # Filter available options based on the search term
-    filtered_store_opts = filter_stores_by_search(all_stores, store_search)
-
-    if store_search and filtered_store_opts:
-        st.sidebar.markdown(
-            f'<div class="store-search-info">🔍 {len(filtered_store_opts)} store(s) match "<b>{store_search}</b>"</div>',
-            unsafe_allow_html=True,
-        )
-    elif store_search and not filtered_store_opts:
-        st.sidebar.warning(f'No stores match "{store_search}"')
-
-    sel_stores = st.sidebar.multiselect(
-        "🏪 Store Code (select from results)",
-        options=filtered_store_opts,
-        default=filtered_store_opts if store_search and filtered_store_opts else [],
-        help="All matching stores are pre-selected when you search. Deselect any you don't need.",
+    store_opts = ["All"] + all_stores
+    sel_store_single = st.sidebar.selectbox(
+        "🏪 Store Code",
+        options=store_opts,
+        index=0,
+        help="Select a specific store to filter, or keep 'All' to show all stores.",
     )
+    # Convert to list for uniform downstream handling
+    sel_stores = [] if sel_store_single == "All" else [sel_store_single]
 
     # Country / Channel
     all_countries = sorted(src["COUNTRY_CODE"].dropna().unique().tolist())
@@ -1177,7 +1635,7 @@ def main():
 
     st.markdown('<div class="section-title">📂 Upload Chat Data</div>', unsafe_allow_html=True)
     uploaded = st.file_uploader(
-        "Upload Excel file with sheets: lazada_chat_enquiries & shopee_chat_enquiries",
+        "Upload Excel file with sheets: lazada_chat_enquiries, shopee_chat_enquiries & tiktok_chat_enquiries",
         type=["xlsx"],
         help="Single Excel file containing both Lazada and Shopee chat sheets.",
     )
@@ -1188,28 +1646,37 @@ def main():
         **Expected Excel format:**
         - Sheet 1: `lazada_chat_enquiries`
         - Sheet 2: `shopee_chat_enquiries`
+        - Sheet 3: `tiktok_chat_enquiries` *(optional)*
         - Columns: `STORE_CODE`, `SITE_NICK_NAME_ID`, `COUNTRY_CODE`, `CONVERSATION_ID`,
           `IS_READ`, `IS_ANSWERED`, `MESSAGE_TIME`, `BUYER_NAME`, `MESSAGE_PARSED`,
           `MESSAGE_TYPE`, `MESSAGE_ID`, `SENDER`, `BUYER_ID`
         """)
         return
 
+    # Read file bytes once — uploaded.read() is a stream, consumed on first call
+    import hashlib
+    file_bytes = uploaded.read()
+    file_hash  = hashlib.md5(file_bytes).hexdigest()  # busts cache when file changes
+
     with st.spinner("⏳ Loading chat data…"):
-        raw_df = load_data(uploaded.read())
+        raw_df = load_data(file_bytes, file_hash)
 
     _max_ts = raw_df["MESSAGE_TIME"].dropna().max()
     _min_ts = raw_df["MESSAGE_TIME"].dropna().min()
-    # Use real system date as "today" — never clip data based on file's max date
+
+    # Always use real system date as today — never clip to file's max date
     today_date  = datetime.today().date()
-    today_str   = today_date.strftime("%Y-%m-%d")
     today_ts    = pd.Timestamp(today_date)
+    today_str   = today_date.strftime("%Y-%m-%d")
     data_end    = _max_ts.date() if pd.notna(_max_ts) else today_date
     data_start  = _min_ts.date() if pd.notna(_min_ts) else today_date
 
+    _platforms_found = sorted(raw_df["PLATFORM"].unique().tolist())
+    _plat_str = " · ".join(_platforms_found)
     st.success(
         f"✅ Loaded **{len(raw_df):,}** messages · "
         f"**{raw_df['CONVERSATION_ID'].nunique():,}** conversations · "
-        f"**{raw_df['PLATFORM'].nunique()}** platforms · "
+        f"Platforms: **{_plat_str}** · "
         f"Data range: **{data_start}** → **{data_end}**"
     )
 
@@ -1224,10 +1691,40 @@ def main():
         return
 
     st.markdown('<div class="section-title">📈 Key Metrics</div>', unsafe_allow_html=True)
-    render_metrics(conv_filtered, pd.Timestamp(data_end))
+    render_metrics(conv_filtered, today_ts)
 
     st.markdown('<div class="section-title">📊 Analytics</div>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
+
+    # ── Platform summary cards ──────────────────────────────────────────────
+    platform_order = ["Shopee", "Lazada", "TikTok"]
+    all_platforms  = [p for p in platform_order if p in conv_filtered["PLATFORM"].values]
+    other_platforms = [p for p in conv_filtered["PLATFORM"].unique() if p not in platform_order]
+    all_platforms  += other_platforms
+
+    if len(all_platforms) > 1:
+        pcols = st.columns(len(all_platforms))
+        plat_colors = {"Shopee": "#EE4D2D", "Lazada": "#0F146D", "TikTok": "#010101"}
+        for i, plat in enumerate(all_platforms):
+            plat_df   = conv_filtered[conv_filtered["PLATFORM"] == plat]
+            plat_crr  = round(plat_df["IS_RESOLVED"].sum() / len(plat_df) * 100, 1) if len(plat_df) else 0
+            plat_csat_raw = plat_df["CSAT_PROXY"].mean()
+            # Fix: compute the display string BEFORE embedding in f-string
+            plat_csat_str = f"{plat_csat_raw:.1f}" if not pd.isna(plat_csat_raw) else "—"
+            bg_color  = plat_colors.get(plat, "#1B2A4A")
+            with pcols[i]:
+                st.markdown(f"""
+                <div style="background:{bg_color};border-radius:10px;padding:12px 14px;color:white;margin-bottom:8px;">
+                  <div style="font-size:13px;font-weight:700;letter-spacing:0.5px;opacity:0.85;">{plat.upper()}</div>
+                  <div style="font-size:22px;font-weight:800;margin:4px 0;">{len(plat_df):,}</div>
+                  <div style="font-size:11px;opacity:0.75;">conversations</div>
+                  <div style="display:flex;gap:12px;margin-top:8px;font-size:12px;">
+                    <span>CRR {plat_crr}%</span>
+                    <span>CSAT {plat_csat_str}</span>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    c1, c2, c3, c4 = st.columns(4)
 
     with c1:
         issue_counts = conv_filtered["ISSUE_TYPE"].value_counts().reset_index()
@@ -1251,6 +1748,26 @@ def main():
         )
         st.markdown("**Daily Conversation Volume**")
         st.line_chart(daily.set_index("DATE")["Conversations"], color="#FF6B35")
+
+    with c4:
+        # Platform volume breakdown over time
+        if len(all_platforms) > 1:
+            plat_daily = (
+                conv_filtered
+                .assign(DATE=conv_filtered["LAST_MSG_TIME"].dt.normalize())
+                .groupby(["DATE", "PLATFORM"])
+                .size()
+                .reset_index(name="Count")
+                .pivot(index="DATE", columns="PLATFORM", values="Count")
+                .fillna(0)
+            )
+            st.markdown("**Volume by Platform**")
+            st.line_chart(plat_daily)
+        else:
+            plat_counts = conv_filtered["PLATFORM"].value_counts().reset_index()
+            plat_counts.columns = ["Platform", "Count"]
+            st.markdown("**Platform Breakdown**")
+            st.bar_chart(plat_counts.set_index("Platform")["Count"], color="#1B2A4A")
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🔥 Today's Priority Chats",
@@ -1276,7 +1793,8 @@ def main():
     }
 
     with tab1:
-        latest_date = pd.Timestamp(data_end) if data_end else today_ts
+        # Show conversations from the most recent date in the uploaded file
+        latest_date = pd.Timestamp(data_end)
         today_df = conv_filtered[conv_filtered["LAST_MSG_TIME"].dt.normalize() == latest_date]
         today_sorted = today_df.sort_values(
             "PRIORITY", key=lambda s: s.map({"High": 0, "Medium": 1, "Low": 2}).fillna(3)
@@ -1309,7 +1827,7 @@ def main():
         st.markdown("### 💬 Suggested Reply Templates by Issue Type")
         st.caption("Empathetic, resolution-oriented replies — replace [PLACEHOLDERS] before sending.")
         for issue_type, reply_text in SUGGESTED_REPLIES.items():
-            if issue_type == "Other":
+            if issue_type == "Others":
                 continue
             priority = get_priority(issue_type)
             badge_color = {"High": "🔴", "Medium": "🟡", "Low": "🔵"}.get(priority, "⚪")
@@ -1336,7 +1854,7 @@ def main():
             <div class="reply-box">{row['BUYER_SUMMARY']}</div>
             """, unsafe_allow_html=True)
             # Look up reply from dict — column is not stored in memory
-            suggested = SUGGESTED_REPLIES.get(str(row['ISSUE_TYPE']), SUGGESTED_REPLIES["Other"])
+            suggested = SUGGESTED_REPLIES.get(str(row['ISSUE_TYPE']), SUGGESTED_REPLIES["Others"])
             st.markdown(f"""
             <div class="reply-label">Suggested Reply</div>
             <div class="reply-box">{suggested}</div>
@@ -1358,11 +1876,15 @@ def main():
                 disp_wow["Avg_CRT_mins"] = disp_wow["Avg_CRT_mins"].apply(
                     lambda x: fmt_mins(x) if pd.notna(x) else "—")
                 st.dataframe(
-                    disp_wow[["WEEK","Conversations","CRR_%","Avg_CSAT","Avg_CRT_mins",
-                               "Conversions","Δ Conversations","Δ CRR_%","Δ Avg_CSAT"]].reset_index(drop=True),
+                    disp_wow[[c for c in ["WEEK","Conversations","Shopee","Lazada","TikTok",
+                               "CRR_%","Avg_CSAT","Avg_CRT_mins","Conversions",
+                               "Δ Conversations","Δ CRR_%","Δ Avg_CSAT"] if c in disp_wow.columns]].reset_index(drop=True),
                     use_container_width=True,
                     column_config={
                         "WEEK":            st.column_config.TextColumn("Week Starting"),
+                        "Shopee":          st.column_config.NumberColumn("Shopee", format="%d"),
+                        "Lazada":          st.column_config.NumberColumn("Lazada", format="%d"),
+                        "TikTok":          st.column_config.NumberColumn("TikTok", format="%d"),
                         "CRR_%":           st.column_config.NumberColumn("CRR %", format="%.1f%%"),
                         "Avg_CSAT":        st.column_config.NumberColumn("CSAT", format="%.2f"),
                         "Conversions":     st.column_config.NumberColumn("Conversions"),
@@ -1383,11 +1905,15 @@ def main():
                 disp_mom["Avg_CRT_mins"] = disp_mom["Avg_CRT_mins"].apply(
                     lambda x: fmt_mins(x) if pd.notna(x) else "—")
                 st.dataframe(
-                    disp_mom[["MONTH","Conversations","CRR_%","Avg_CSAT","Avg_CRT_mins",
-                               "Conversions","Δ Conversations","Δ CRR_%","Δ Avg_CSAT"]].reset_index(drop=True),
+                    disp_mom[[c for c in ["MONTH","Conversations","Shopee","Lazada","TikTok",
+                               "CRR_%","Avg_CSAT","Avg_CRT_mins","Conversions",
+                               "Δ Conversations","Δ CRR_%","Δ Avg_CSAT"] if c in disp_mom.columns]].reset_index(drop=True),
                     use_container_width=True,
                     column_config={
                         "MONTH":           st.column_config.TextColumn("Month"),
+                        "Shopee":          st.column_config.NumberColumn("Shopee", format="%d"),
+                        "Lazada":          st.column_config.NumberColumn("Lazada", format="%d"),
+                        "TikTok":          st.column_config.NumberColumn("TikTok", format="%d"),
                         "CRR_%":           st.column_config.NumberColumn("CRR %", format="%.1f%%"),
                         "Avg_CSAT":        st.column_config.NumberColumn("CSAT", format="%.2f"),
                         "Conversions":     st.column_config.NumberColumn("Conversions"),
@@ -1564,8 +2090,14 @@ def main():
 
     # ── Issue Breakdown Table ─────────────────────────────────────────────────
     st.markdown('<div class="section-title">📂 Issue Type Breakdown</div>', unsafe_allow_html=True)
+
+    # Platform-wise issue toggle
+    _plat_opts = ["All Platforms"] + sorted(conv_filtered["PLATFORM"].dropna().unique().tolist())
+    _sel_plat_ib = st.selectbox("Filter by Platform", _plat_opts, key="ib_platform")
+    _ib_df = conv_filtered if _sel_plat_ib == "All Platforms" else conv_filtered[conv_filtered["PLATFORM"] == _sel_plat_ib]
+
     ib = (
-        conv_filtered
+        _ib_df
         .groupby(["ISSUE_TYPE", "PRIORITY"])
         .agg(
             Count=("CONVERSATION_ID", "count"),
@@ -1579,7 +2111,14 @@ def main():
     ib["Avg_CSAT"]     = ib["Avg_CSAT"].round(1)
     ib["Avg_CRT_mins"] = ib["Avg_CRT_mins"].round(0).fillna(0).astype(int)
     ib["Unresolved"]   = ib["Unresolved"].astype(int)
-    st.dataframe(ib, use_container_width=True, height=300)
+    st.dataframe(ib, use_container_width=True, height=300,
+        column_config={
+            "Count":         st.column_config.NumberColumn("Count"),
+            "Unresolved":    st.column_config.NumberColumn("Unresolved"),
+            "Avg_CSAT":      st.column_config.NumberColumn("CSAT", format="%.1f"),
+            "Avg_CRT_mins":  st.column_config.NumberColumn("CRT (min)"),
+        }
+    )
 
     # ── Store Performance ─────────────────────────────────────────────────────
     st.markdown('<div class="section-title">🏪 Store Performance</div>', unsafe_allow_html=True)
@@ -1609,7 +2148,7 @@ def main():
         height=350,
         column_config={
             "STORE_CODE":   st.column_config.TextColumn("Store Code"),
-            "PLATFORM":     st.column_config.TextColumn("Platform"),
+            "PLATFORM":     st.column_config.TextColumn("Platform"),  # Shopee / Lazada / TikTok
             "COUNTRY_CODE": st.column_config.TextColumn("Country"),
             "Conversations":st.column_config.NumberColumn("Conversations"),
             "Unresolved":   st.column_config.NumberColumn("Unresolved"),
@@ -1622,7 +2161,7 @@ def main():
 
     # ── Excel Download ────────────────────────────────────────────────────────
     st.markdown('<div class="section-title">⬇️ Download Report</div>', unsafe_allow_html=True)
-    cutoff_7d  = pd.Timestamp(data_end) - pd.Timedelta(days=6)
+    cutoff_7d  = pd.Timestamp(data_end) - pd.Timedelta(days=6)  # last 7 days of file data
     conv_7day  = conv_df[conv_df["LAST_MSG_TIME"] >= cutoff_7d].copy()
 
     dl_col1, dl_col2 = st.columns(2)
