@@ -271,17 +271,31 @@ AGENT_SHIFT = {
     "Ratchakorn": "Full-time · AABWU / AAFHU / AAFHB",
 }
 
+# ── Stalling / pending-action phrases used by the seller ──────────────────────
+# NOTE: These are matched case-insensitively against the seller's LATEST message
+# to decide whether a chat that the seller "closed" is actually still pending.
 STALLING_PATTERNS = [
     r"will (check|look|get back|follow up|investigate|verify|review|update)",
     r"let me (check|look into|verify|confirm|see)",
     r"(checking|looking into|investigating|following up|reviewing)",
     r"please (wait|hold on|allow us|bear with)",
     r"i will (check|get back|follow up|update)",
-    r"we (are|will) (checking|looking|investigating|getting back|following up)",
+    r"we (are|will) (checking|looking|investigating|getting back|following up|updating|updat(e|ing) you)",
     r"get back to you",
     r"bear with us",
-    r"kindly (wait|allow|hold)",
-    r"we'?ll? (check|look|get back|follow up)",
+    r"kindly (wait|allow|hold|bear with)",
+    r"we'?ll? (check|look|get back|follow up|update you|update)",
+    r"we will (update|inform|notify) you",
+    r"we have (an )?update",
+    r"pending (confirmation|approval|response|update)",
+    r"awaiting (update|response|confirmation|reply|feedback)",
+    r"under review",
+    r"in progress",
+    r"still (in progress|pending|being reviewed|being processed)",
+    r"we (have|'ve) (forwarded|escalated|raised|reported|flagged) (this|it|the (issue|matter|case))",
+    r"forwarded (this|it) to (the )?(relevant|concerned|respective) team",
+    r"(relevant|concerned|respective) team (will|is|has)",
+    r"check with (the )?(relevant|concerned|respective) team",
     r"akan (kami|segera) (cek|periksa|tindak lanjut|proses|hubungi)",
     r"mohon (tunggu|ditunggu|bersabar)",
     r"kami (sedang|akan) (cek|periksa|proses|tindak lanjut)",
@@ -304,6 +318,23 @@ RESOLUTION_PATTERNS = [
     r"คืนเงินเรียบร้อย", r"ยกเลิกเรียบร้อย",
     r"sudah (diproses|selesai|dikirim|dikembalikan|dibatalkan)",
     r"telah (diproses|selesai|diselesaikan|dikirimkan)",
+]
+
+# ── Simple buyer closing / acknowledgment phrases ──────────────────────────
+# If the BUYER sends the very last message in a conversation and it is just a
+# thank-you / acknowledgment (not a new question or follow-up), the chat
+# should still count as Resolved rather than Unresolved — the seller already
+# closed the issue and the buyer is simply confirming receipt.
+BUYER_CLOSING_PATTERNS = [
+    r"^\s*(thanks?|thank you|thankyou|thank u|tq|ty)\b",
+    r"\bthank(s| you)?\b\s*[!.]*\s*$",
+    r"^\s*(ok(ay)?|noted|got it|alright|understood|sure|fine)\s*[!.]*\s*$",
+    r"^\s*(great|perfect|awesome|good|nice|cool)\s*[!.]*\s*$",
+    r"^\s*(great|perfect|awesome|good)\s*,?\s*(thanks|thank you)\s*[!.]*\s*$",
+    r"👍|🙏|😊|✅",
+    r"ขอบคุณ", r"เข้าใจแล้ว", r"รับทราบ", r"โอเค",
+    r"terima kasih", r"^\s*(oke|baik|sip)\s*[!.]*\s*$", r"paham", r"mengerti",
+    r"salamat", r"^\s*(okay lang|sige|salamat po)\s*[!.]*\s*$",
 ]
 
 AUTO_REPLY_PATTERNS = [
@@ -579,13 +610,65 @@ def is_auto_reply(text: str) -> bool:
     return matches_any(text, AUTO_REPLY_PATTERNS)
 
 
-def conversation_is_unresolved(seller_msgs: list) -> bool:
+def conversation_is_unresolved(messages_in_order: list) -> bool:
+    """
+    Determine whether a conversation is Unresolved.
+
+    messages_in_order: list of (sender_lower, message_text) tuples for the
+    WHOLE conversation (buyer + seller), sorted chronologically.
+
+    This keeps the ORIGINAL flag-scan logic as the base (a seller stalling
+    phrase turns the flag on; a later seller resolution phrase turns it back
+    off), then layers the two new rules on top:
+
+      A. If the seller's message is NOT the last message in the conversation
+         (i.e. the buyer spoke last), the chat is Unresolved — UNLESS the
+         buyer's final message is just a simple closing acknowledgment
+         (e.g. "thanks!", "ok noted", "👍") in which case the seller's prior
+         resolution still counts and the chat stays Resolved.
+      B. If the seller DID send the last message, but that message itself
+         still contains a follow-up / pending-action / stalling phrase
+         (e.g. "will check and get back to you", "under review", ...), the
+         chat is Unresolved even though the seller had the last word.
+
+    Otherwise the chat is Resolved.
+    """
+    if not messages_in_order:
+        return False
+
+    # ── Base: original stall-flag scan across the seller's messages ──────────
+    # A stalling phrase sets the flag; any later resolution phrase from the
+    # seller clears it again. This preserves the original file's behaviour.
     stall_found = False
-    for msg in seller_msgs:
+    for sender, msg in messages_in_order:
+        if (sender or "").strip().lower() != "seller":
+            continue
         if matches_any(msg, STALLING_PATTERNS):
             stall_found = True
         if matches_any(msg, RESOLUTION_PATTERNS):
             stall_found = False
+
+    # ── Layer on the new "last message" rules ─────────────────────────────────
+    last_sender, last_msg = messages_in_order[-1]
+    last_sender = (last_sender or "").strip().lower()
+
+    if last_sender == "seller":
+        # Rule B — seller had the last word, but is it still a stalling reply?
+        if matches_any(last_msg, STALLING_PATTERNS):
+            stall_found = True
+        # If not stalling, leave stall_found exactly as the base scan decided
+        # (i.e. a genuine resolution stays Resolved).
+    else:
+        # Rule A — buyer had the last word.
+        if matches_any(last_msg, BUYER_CLOSING_PATTERNS):
+            # Simple thank-you / acknowledgment — don't override a resolution
+            # that the seller already gave earlier in the conversation.
+            pass
+        else:
+            # Buyer's last message is a real follow-up / new question / still
+            # waiting on a reply — the chat is still open.
+            stall_found = True
+
     return stall_found
 
 
@@ -1067,7 +1150,16 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
         s_msgs     = seller_msgs_per_conv.get(conv_id, [])
         meta       = meta_df.loc[conv_id] if conv_id in meta_df.index else {}
 
-        is_unresolved = conversation_is_unresolved(s_msgs)
+        # Ordered (sender, message) pairs for the WHOLE conversation — used to
+        # determine whether the seller's message is the last message, and if
+        # so, whether that final message still contains pending/follow-up
+        # phrases (see conversation_is_unresolved for the full rule set).
+        ordered_msgs = list(zip(
+            grp["_sender_lower"].tolist(),
+            grp["MESSAGE_PARSED"].tolist(),
+        ))
+
+        is_unresolved = conversation_is_unresolved(ordered_msgs)
         is_resolved   = not is_unresolved
         priority      = get_priority(issue_type)
         csat          = compute_csat(sentiment, is_resolved)
