@@ -1,3 +1,4 @@
+```python
 """
 Chat Analyzer Dashboard — Shopee, Lazada & TikTok
 ==================================================
@@ -2106,3 +2107,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
