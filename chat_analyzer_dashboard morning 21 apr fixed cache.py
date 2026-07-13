@@ -337,6 +337,27 @@ BUYER_CLOSING_PATTERNS = [
     r"salamat", r"^\s*(okay lang|sige|salamat po)\s*[!.]*\s*$",
 ]
 
+# ── Genuine buyer follow-up / still-open signals ───────────────────────────
+# Used to decide whether a conversation ending on a BUYER message is truly
+# still open (buyer asking something new, chasing a reply, or restating the
+# problem) versus just an ambiguous/neutral last line that shouldn't force
+# the chat into Unresolved. Only these patterns flip an ending-on-buyer chat
+# to Unresolved; anything else defaults to whatever the seller already
+# established (i.e. stays Resolved if the seller had already resolved it).
+BUYER_FOLLOWUP_PATTERNS = [
+    r"\?",  # any question mark — buyer is still asking something
+    r"\b(still|belum|masih|ยัง)\b.*(wait|receive|resolv|refund|repl|respon|arrive)",
+    r"any (update|news|response|reply)",
+    r"why (is|isn'?t|hasn'?t|has not|not)",
+    r"(no|haven'?t (got|received)) (response|reply|update)\b",
+    r"(please |kindly )?(help|respond|reply|answer)( me| us)?\b",
+    r"(this is|it'?s) (still|not) (resolved|fixed|done|working)",
+    r"(kindly|please) (respond|reply|check again|update (me|us))",
+    r"ยังไม่ได้รับ", r"ยังไม่", r"รอคำตอบ", r"ทำไม",
+    r"kok (belum|gak|nggak|tidak)", r"kapan (selesai|beres|dikirim)", r"gimana (ini|nih)",
+    r"hello+\s*[?]*\s*$", r"^\s*hello[?!.]*\s*(anyone|there)?\s*$",
+]
+
 AUTO_REPLY_PATTERNS = [
     r"(thank you for contacting|thanks for reaching out).*auto",
     r"auto.?reply", r"automated (response|message|reply)",
@@ -617,21 +638,22 @@ def conversation_is_unresolved(messages_in_order: list) -> bool:
     messages_in_order: list of (sender_lower, message_text) tuples for the
     WHOLE conversation (buyer + seller), sorted chronologically.
 
-    This keeps the ORIGINAL flag-scan logic as the base (a seller stalling
-    phrase turns the flag on; a later seller resolution phrase turns it back
-    off), then layers the two new rules on top:
+    Base: the ORIGINAL flag-scan logic (a seller stalling phrase turns the
+    flag on; a later seller resolution phrase turns it back off) — this is
+    the default outcome and matches the original file's behaviour.
 
-      A. If the seller's message is NOT the last message in the conversation
-         (i.e. the buyer spoke last), the chat is Unresolved — UNLESS the
-         buyer's final message is just a simple closing acknowledgment
-         (e.g. "thanks!", "ok noted", "👍") in which case the seller's prior
-         resolution still counts and the chat stays Resolved.
-      B. If the seller DID send the last message, but that message itself
-         still contains a follow-up / pending-action / stalling phrase
-         (e.g. "will check and get back to you", "under review", ...), the
-         chat is Unresolved even though the seller had the last word.
+    Layered on top, narrowly, so it doesn't over-flag chats as Unresolved:
 
-    Otherwise the chat is Resolved.
+      A. If the seller sent the last message but it still contains a
+         follow-up / pending-action / stalling phrase (e.g. "will check and
+         get back to you", "under review", ...), force Unresolved.
+      B. If the buyer sent the last message, only force Unresolved when that
+         message is a genuine, still-open follow-up — a new question, a
+         "still waiting" / "why hasn't this arrived" type phrase, chasing a
+         reply, etc. (see BUYER_FOLLOWUP_PATTERNS). Any other buyer
+         last-message (a plain "ok", "thanks", or anything else that isn't
+         clearly still-open) leaves the base result untouched — so a chat
+         the seller already resolved stays Resolved.
     """
     if not messages_in_order:
         return False
@@ -648,26 +670,23 @@ def conversation_is_unresolved(messages_in_order: list) -> bool:
         if matches_any(msg, RESOLUTION_PATTERNS):
             stall_found = False
 
-    # ── Layer on the new "last message" rules ─────────────────────────────────
+    # ── Layer on the "last message" rules ─────────────────────────────────────
     last_sender, last_msg = messages_in_order[-1]
     last_sender = (last_sender or "").strip().lower()
 
     if last_sender == "seller":
-        # Rule B — seller had the last word, but is it still a stalling reply?
+        # Rule A — seller had the last word, but is it still a stalling reply?
         if matches_any(last_msg, STALLING_PATTERNS):
             stall_found = True
         # If not stalling, leave stall_found exactly as the base scan decided
         # (i.e. a genuine resolution stays Resolved).
     else:
-        # Rule A — buyer had the last word.
-        if matches_any(last_msg, BUYER_CLOSING_PATTERNS):
-            # Simple thank-you / acknowledgment — don't override a resolution
-            # that the seller already gave earlier in the conversation.
-            pass
-        else:
-            # Buyer's last message is a real follow-up / new question / still
-            # waiting on a reply — the chat is still open.
+        # Rule B — buyer had the last word. Only force Unresolved if the
+        # buyer's message is clearly a genuine, still-open follow-up — not
+        # just "any non-closing message", which was over-flagging chats.
+        if matches_any(last_msg, BUYER_FOLLOWUP_PATTERNS) and not matches_any(last_msg, BUYER_CLOSING_PATTERNS):
             stall_found = True
+        # Any ambiguous / neutral / closing buyer message: keep the base result.
 
     return stall_found
 
